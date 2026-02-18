@@ -1,0 +1,2178 @@
+{
+	"info": {
+		"_postman_id": "jueteng-platform-api-2026",
+		"name": "Jueteng Platform API",
+		"description": "Complete API collection for the Jueteng Digital Platform.\n\nBase URL: {{baseUrl}}\nAuth: JWT Bearer via httpOnly cookies (auto-set on login/register).\nCurrency: PHP\n\n---\n\n**Setup:**\n1. Set `baseUrl` variable to `http://localhost:3000/api`\n2. Register or Login — cookies are auto-attached\n3. Use `{{id}}` variable for single-record operations",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000/api",
+			"type": "string"
+		},
+		{
+			"key": "id",
+			"value": "507f1f77bcf86cd799439011",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"description": "System health and readiness checks. No authentication required.",
+			"item": [
+				{
+					"name": "Basic Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/../",
+							"host": ["{{baseUrl}}"],
+							"path": ["..", ""]
+						},
+						"description": "Returns basic status, timestamp, and uptime."
+					}
+				},
+				{
+					"name": "Enhanced Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/../health",
+							"host": ["{{baseUrl}}"],
+							"path": ["..", "health"]
+						},
+						"description": "Enhanced health check with SLA monitoring status."
+					}
+				},
+				{
+					"name": "Redis Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/../health/redis",
+							"host": ["{{baseUrl}}"],
+							"path": ["..", "health", "redis"]
+						},
+						"description": "Redis connectivity check — returns latency, memory usage, total keys."
+					}
+				}
+			]
+		},
+		{
+			"name": "Auth",
+			"description": "Registration, login, token management, OTP verification, and user profile.\nRate-limited: 10 requests per 15 minutes.",
+			"item": [
+				{
+					"name": "Register",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const res = pm.response.json();",
+									"    if (res.data && res.data.user) {",
+									"        pm.collectionVariables.set('id', res.data.user.id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"juan.delacruz@example.com\",\n  \"password\": \"StrongPass123!\",\n  \"firstName\": \"Juan\",\n  \"lastName\": \"Dela Cruz\",\n  \"middleName\": \"Santos\",\n  \"phoneNumber\": \"+639171234567\",\n  \"userName\": \"juandc\",\n  \"role\": \"PLAYER\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "register"]
+						},
+						"description": "Register a new PLAYER or AGENT account. Creates Person, User, Wallet, and Session. Returns JWT access token in httpOnly cookie."
+					}
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const res = pm.response.json();",
+									"    if (res.data && res.data.user) {",
+									"        pm.collectionVariables.set('id', res.data.user.id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"juan.delacruz@example.com\",\n  \"password\": \"StrongPass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "login"]
+						},
+						"description": "Authenticate with email + password. Returns access & refresh tokens as httpOnly cookies. Updates lastLogin timestamp."
+					}
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/logout",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "logout"]
+						},
+						"description": "Invalidate the current session. Clears token and refreshToken cookies. Deletes session record from DB."
+					}
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refreshToken\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/refresh",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "refresh"]
+						},
+						"description": "Exchange a valid refresh token (from cookie or body) for a new access token. Rotates the refresh token and session."
+					}
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"currentPassword\": \"StrongPass123!\",\n  \"newPassword\": \"NewSecure456@\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/change-password",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "change-password"]
+						},
+						"description": "Change the authenticated user's password. Requires current password verification. Auth required."
+					}
+				},
+				{
+					"name": "Get Me (Profile)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/me",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "me"]
+						},
+						"description": "Get the current authenticated user's full profile including person details, wallet, KYC status, and agent info. Auth required."
+					}
+				},
+				{
+					"name": "Request OTP",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"juan.delacruz@example.com\",\n  \"type\": \"EMAIL_VERIFICATION\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/otp/request",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "otp", "request"]
+						},
+						"description": "Request a one-time password sent via EMAIL or SMS. Types: REGISTRATION, LOGIN, PASSWORD_RESET, PHONE_VERIFICATION, EMAIL_VERIFICATION, WITHDRAWAL."
+					}
+				},
+				{
+					"name": "Verify OTP",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"juan.delacruz@example.com\",\n  \"code\": \"482910\",\n  \"type\": \"EMAIL_VERIFICATION\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/otp/verify",
+							"host": ["{{baseUrl}}"],
+							"path": ["auth", "otp", "verify"]
+						},
+						"description": "Verify a previously requested OTP code. Marks OTP as verified and updates user verification flags."
+					}
+				}
+			]
+		},
+		{
+			"name": "Agent",
+			"description": "Manage agents in the Jueteng network — Cobrador, Cabo, Operator, Capitalista, Pagador, Bolador.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Agents",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/agent?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["agent"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array e.g. [{\"field\":\"status\",\"operator\":\"eq\",\"value\":\"ACTIVE\"}]",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all agents with pagination, filtering, sorting, and grouping."
+					}
+				},
+				{
+					"name": "Get Agent by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/agent/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["agent", "{{id}}"]
+						},
+						"description": "Get a single agent by MongoDB ObjectId."
+					}
+				},
+				{
+					"name": "Create Agent",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"role\": \"COBRADOR\",\n  \"territoryId\": \"507f1f77bcf86cd799439012\",\n  \"supervisorId\": \"507f1f77bcf86cd799439013\",\n  \"commissionRate\": 0.15,\n  \"status\": \"ACTIVE\",\n  \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/agent",
+							"host": ["{{baseUrl}}"],
+							"path": ["agent"]
+						},
+						"description": "Create a new agent. Roles: COBRADOR, CABO, OPERATOR, CAPITALISTA, PAGADOR, BOLADOR."
+					}
+				},
+				{
+					"name": "Update Agent",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"role\": \"CABO\",\n  \"commissionRate\": 0.05,\n  \"status\": \"ACTIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/agent/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["agent", "{{id}}"]
+						},
+						"description": "Partially update an agent (role, territory, commission rate, status)."
+					}
+				},
+				{
+					"name": "Delete Agent",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/agent/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["agent", "{{id}}"]
+						},
+						"description": "Permanently delete an agent record."
+					}
+				}
+			]
+		},
+		{
+			"name": "Territory",
+			"description": "Geographic areas (barangays, municipalities) managed by Cabos and their Cobradors.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Territories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/territory?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["territory"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all territories with pagination, filtering, sorting."
+					}
+				},
+				{
+					"name": "Get Territory by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/territory/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["territory", "{{id}}"]
+						},
+						"description": "Get a single territory by MongoDB ObjectId."
+					}
+				},
+				{
+					"name": "Create Territory",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Brgy. San Antonio\",\n  \"barangay\": \"San Antonio\",\n  \"municipality\": \"Makati\",\n  \"province\": \"Metro Manila\",\n  \"region\": \"NCR\",\n  \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/territory",
+							"host": ["{{baseUrl}}"],
+							"path": ["territory"]
+						},
+						"description": "Create a new territory."
+					}
+				},
+				{
+					"name": "Update Territory",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Brgy. Poblacion\",\n  \"municipality\": \"Quezon City\",\n  \"isActive\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/territory/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["territory", "{{id}}"]
+						},
+						"description": "Partially update territory details."
+					}
+				},
+				{
+					"name": "Delete Territory",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/territory/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["territory", "{{id}}"]
+						},
+						"description": "Permanently delete a territory."
+					}
+				}
+			]
+		},
+		{
+			"name": "Wallet",
+			"description": "User wallets holding PHP balances. One wallet per user, created automatically on registration.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Wallets",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["wallet"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all wallets with pagination, filtering, sorting."
+					}
+				},
+				{
+					"name": "Get Wallet by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["wallet", "{{id}}"]
+						},
+						"description": "Get a single wallet by ID."
+					}
+				},
+				{
+					"name": "Create Wallet",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"balance\": 5000,\n  \"bonus\": 100,\n  \"currency\": \"PHP\",\n  \"status\": \"ACTIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet",
+							"host": ["{{baseUrl}}"],
+							"path": ["wallet"]
+						},
+						"description": "Create a new wallet (admin use — wallets are auto-created on registration). Status: ACTIVE, FROZEN, CLOSED."
+					}
+				},
+				{
+					"name": "Update Wallet",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"balance\": 7500,\n  \"status\": \"ACTIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/wallet/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["wallet", "{{id}}"]
+						},
+						"description": "Update wallet (adjust balance, change status)."
+					}
+				},
+				{
+					"name": "Delete Wallet",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["wallet", "{{id}}"]
+						},
+						"description": "Permanently delete a wallet."
+					}
+				}
+			]
+		},
+		{
+			"name": "KYC",
+			"description": "Know Your Customer identity verification. Users upload ID documents for admin review.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All KYC Records",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/kyc?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["kyc"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all KYC records with pagination, filtering, sorting."
+					}
+				},
+				{
+					"name": "Get KYC by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/kyc/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["kyc", "{{id}}"]
+						},
+						"description": "Get a single KYC record by ID."
+					}
+				},
+				{
+					"name": "Create KYC",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"documentType\": \"national_id\",\n  \"documentUrl\": \"https://storage.example.com/docs/national-id-front.jpg\",\n  \"selfieUrl\": \"https://storage.example.com/docs/selfie.jpg\",\n  \"status\": \"PENDING\",\n  \"notes\": \"Awaiting admin review\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/kyc",
+							"host": ["{{baseUrl}}"],
+							"path": ["kyc"]
+						},
+						"description": "Submit a new KYC verification request. Status: PENDING, APPROVED, REJECTED, REQUIRES_MORE_INFO."
+					}
+				},
+				{
+					"name": "Update KYC",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"APPROVED\",\n  \"reviewedBy\": \"507f1f77bcf86cd799439099\",\n  \"notes\": \"Valid government ID. Verified.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/kyc/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["kyc", "{{id}}"]
+						},
+						"description": "Update KYC status (admin approval/rejection)."
+					}
+				},
+				{
+					"name": "Delete KYC",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/kyc/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["kyc", "{{id}}"]
+						},
+						"description": "Permanently delete a KYC record."
+					}
+				}
+			]
+		},
+		{
+			"name": "Session",
+			"description": "JWT refresh token sessions. Created automatically on login/register. Used for token rotation and device tracking.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Sessions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/session?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["session"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all sessions with pagination, filtering, sorting."
+					}
+				},
+				{
+					"name": "Get Session by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/session/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["session", "{{id}}"]
+						},
+						"description": "Get a single session by ID."
+					}
+				},
+				{
+					"name": "Create Session",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U\",\n  \"ipAddress\": \"192.168.1.100\",\n  \"userAgent\": \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\",\n  \"expiresAt\": \"2026-03-18T00:00:00.000Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/session",
+							"host": ["{{baseUrl}}"],
+							"path": ["session"]
+						},
+						"description": "Create a new session (admin/internal use — sessions are auto-created on login)."
+					}
+				},
+				{
+					"name": "Update Session",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"expiresAt\": \"2026-04-18T00:00:00.000Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/session/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["session", "{{id}}"]
+						},
+						"description": "Update session details."
+					}
+				},
+				{
+					"name": "Delete Session",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/session/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["session", "{{id}}"]
+						},
+						"description": "Delete a session (force-logout a device)."
+					}
+				}
+			]
+		},
+		{
+			"name": "Notification",
+			"description": "Real-time notifications via Socket.io (IN_APP) and external channels (SMS, EMAIL, PUSH).\nReturns only notifications owned by the authenticated user.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Notifications",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/notification?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["notification"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get all notifications for the current authenticated user."
+					}
+				},
+				{
+					"name": "Get Unread Count",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/notification/unread-count",
+							"host": ["{{baseUrl}}"],
+							"path": ["notification", "unread-count"]
+						},
+						"description": "Get the count of unread (non-READ) notifications for the current user."
+					}
+				},
+				{
+					"name": "Get Notification by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/notification/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["notification", "{{id}}"]
+						},
+						"description": "Get a single notification by ID (ownership check enforced)."
+					}
+				},
+				{
+					"name": "Create Notification",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"507f1f77bcf86cd799439011\",\n  \"type\": \"DRAW_RESULT\",\n  \"title\": \"Morning Draw #456 Result\",\n  \"body\": \"Congratulations! Your bet 5-12 won. Payout: PHP 5,000.\",\n  \"channel\": \"IN_APP\",\n  \"metadata\": {\n    \"drawId\": \"507f1f77bcf86cd799439022\",\n    \"betId\": \"507f1f77bcf86cd799439033\",\n    \"amount\": 5000\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/notification",
+							"host": ["{{baseUrl}}"],
+							"path": ["notification"]
+						},
+						"description": "Create and send a notification. Types: SYSTEM, TRANSACTION, KYC_UPDATE, DRAW_RESULT, PAYOUT, SECURITY, COMMISSION. Channels: IN_APP, SMS, EMAIL, PUSH."
+					}
+				},
+				{
+					"name": "Update Notification",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"READ\",\n  \"readAt\": \"2026-02-18T10:30:00.000Z\",\n  \"sentAt\": \"2026-02-18T10:00:00.000Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/notification/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["notification", "{{id}}"]
+						},
+						"description": "Full update of a notification. Status: PENDING, SENT, READ, FAILED."
+					}
+				},
+				{
+					"name": "Mark as Read",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/notification/{{id}}/read",
+							"host": ["{{baseUrl}}"],
+							"path": ["notification", "{{id}}", "read"]
+						},
+						"description": "Mark a single notification as read (sets readAt and status to READ)."
+					}
+				},
+				{
+					"name": "Mark All as Read",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/notification/read-all",
+							"host": ["{{baseUrl}}"],
+							"path": ["notification", "read-all"]
+						},
+						"description": "Mark all notifications for the current user as read."
+					}
+				},
+				{
+					"name": "Delete Notification",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/notification/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["notification", "{{id}}"]
+						},
+						"description": "Delete a notification."
+					}
+				}
+			]
+		},
+		{
+			"name": "Jueteng Config",
+			"description": "Global game configuration — one active config at a time.\nControls number ranges, payout multiplier, bet limits, and commission rates.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Configs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengConfig?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengConfig"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all config records (typically only one is active)."
+					}
+				},
+				{
+					"name": "Get Config by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengConfig/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengConfig", "{{id}}"]
+						},
+						"description": "Get a config record by ID."
+					}
+				},
+				{
+					"name": "Create Config",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"maxNumber\": 37,\n  \"allowRepeat\": true,\n  \"payoutMultiplier\": 500,\n  \"minBet\": 1,\n  \"maxBet\": 1000,\n  \"cobradorRate\": 0.15,\n  \"caboRate\": 0.05,\n  \"capitalistaRate\": 0.25,\n  \"currency\": \"PHP\",\n  \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/juetengConfig",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengConfig"]
+						},
+						"description": "Create a new game config (usually to supersede the old one)."
+					}
+				},
+				{
+					"name": "Update Config",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"payoutMultiplier\": 600,\n  \"maxBet\": 2000,\n  \"cobradorRate\": 0.18\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/juetengConfig/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengConfig", "{{id}}"]
+						},
+						"description": "Update config values (payout multiplier, bet limits, commission rates)."
+					}
+				},
+				{
+					"name": "Delete Config",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengConfig/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengConfig", "{{id}}"]
+						},
+						"description": "Delete a config record."
+					}
+				}
+			]
+		},
+		{
+			"name": "Draw Schedule",
+			"description": "Recurring daily draw schedule templates (MORNING at 11:00 AM, AFTERNOON at 4:00 PM Manila time).\nEach schedule spawns daily JuetengDraw instances.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Schedules",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/drawSchedule?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["drawSchedule"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all draw schedules."
+					}
+				},
+				{
+					"name": "Get Schedule by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/drawSchedule/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["drawSchedule", "{{id}}"]
+						},
+						"description": "Get a single draw schedule by ID."
+					}
+				},
+				{
+					"name": "Create Schedule",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"drawType\": \"MORNING\",\n  \"scheduledTime\": \"11:00\",\n  \"cutoffMinutes\": 5,\n  \"timeZone\": \"Asia/Manila\",\n  \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/drawSchedule",
+							"host": ["{{baseUrl}}"],
+							"path": ["drawSchedule"]
+						},
+						"description": "Create a new draw schedule. drawType: MORNING or AFTERNOON."
+					}
+				},
+				{
+					"name": "Update Schedule",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"scheduledTime\": \"16:00\",\n  \"cutoffMinutes\": 10,\n  \"isActive\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/drawSchedule/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["drawSchedule", "{{id}}"]
+						},
+						"description": "Update schedule (change time, cutoff, active status)."
+					}
+				},
+				{
+					"name": "Delete Schedule",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/drawSchedule/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["drawSchedule", "{{id}}"]
+						},
+						"description": "Delete a draw schedule."
+					}
+				}
+			]
+		},
+		{
+			"name": "Jueteng Draw",
+			"description": "A single draw instance created per schedule per day.\nLifecycle: SCHEDULED → OPEN → CLOSED → DRAWN → SETTLED.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Draws",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengDraw?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengDraw"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all draws with pagination, filtering (by date, status, type)."
+					}
+				},
+				{
+					"name": "Get Draw by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengDraw/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengDraw", "{{id}}"]
+						},
+						"description": "Get a single draw by ID (includes bets, payouts, commissions)."
+					}
+				},
+				{
+					"name": "Create Draw",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"scheduleId\": \"507f1f77bcf86cd799439011\",\n  \"drawDate\": \"2026-02-18T00:00:00.000Z\",\n  \"drawType\": \"MORNING\",\n  \"scheduledAt\": \"2026-02-18T11:00:00.000Z\",\n  \"status\": \"SCHEDULED\",\n  \"totalBets\": 0,\n  \"totalStake\": 0,\n  \"totalPayout\": 0,\n  \"grossProfit\": 0\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/juetengDraw",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengDraw"]
+						},
+						"description": "Create a new draw instance. Status: SCHEDULED, OPEN, CLOSED, DRAWN, SETTLED, CANCELLED."
+					}
+				},
+				{
+					"name": "Update Draw (Enter Results)",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"DRAWN\",\n  \"number1\": 5,\n  \"number2\": 12,\n  \"combinationKey\": \"5-12\",\n  \"drawnAt\": \"2026-02-18T11:00:00.000Z\",\n  \"boladorId\": \"507f1f77bcf86cd799439022\",\n  \"totalBets\": 342,\n  \"totalStake\": 47850,\n  \"totalPayout\": 15000,\n  \"grossProfit\": 32850\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/juetengDraw/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengDraw", "{{id}}"]
+						},
+						"description": "Update draw — enter winning numbers, change status, record settlement."
+					}
+				},
+				{
+					"name": "Delete Draw",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengDraw/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengDraw", "{{id}}"]
+						},
+						"description": "Delete a draw record."
+					}
+				}
+			]
+		},
+		{
+			"name": "Jueteng Bet",
+			"description": "Individual bets placed by players through cobradors on a specific draw.\nPlayer picks two numbers from 1 to maxNumber (default 37).\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Bets",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengBet?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengBet"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all bets with pagination, filtering (by draw, bettor, status)."
+					}
+				},
+				{
+					"name": "Get Bet by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengBet/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengBet", "{{id}}"]
+						},
+						"description": "Get a single bet by ID."
+					}
+				},
+				{
+					"name": "Place Bet",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"drawId\": \"507f1f77bcf86cd799439011\",\n  \"bettorId\": \"507f1f77bcf86cd799439022\",\n  \"cobradorId\": \"507f1f77bcf86cd799439033\",\n  \"caboId\": \"507f1f77bcf86cd799439044\",\n  \"number1\": 5,\n  \"number2\": 12,\n  \"combinationKey\": \"5-12\",\n  \"amount\": 10,\n  \"currency\": \"PHP\",\n  \"status\": \"PENDING\",\n  \"isWinner\": false,\n  \"reference\": \"20260218-MRN-00001\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/juetengBet",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengBet"]
+						},
+						"description": "Place a new bet on an open draw. Status: PENDING, WON, LOST, VOID, REFUNDED."
+					}
+				},
+				{
+					"name": "Update Bet (Settle)",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"WON\",\n  \"isWinner\": true,\n  \"payoutAmount\": 5000\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/juetengBet/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengBet", "{{id}}"]
+						},
+						"description": "Settle a bet — mark as WON/LOST/VOID, set payout amount."
+					}
+				},
+				{
+					"name": "Delete Bet",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengBet/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengBet", "{{id}}"]
+						},
+						"description": "Delete a bet record."
+					}
+				}
+			]
+		},
+		{
+			"name": "Jueteng Payout",
+			"description": "Payout records for winning bets. Created during draw settlement.\nLifecycle: PENDING → PAID → CLAIMED.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Payouts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengPayout?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengPayout"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all payouts with pagination, filtering (by draw, bettor, status)."
+					}
+				},
+				{
+					"name": "Get Payout by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengPayout/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengPayout", "{{id}}"]
+						},
+						"description": "Get a single payout by ID."
+					}
+				},
+				{
+					"name": "Create Payout",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"betId\": \"507f1f77bcf86cd799439011\",\n  \"drawId\": \"507f1f77bcf86cd799439022\",\n  \"bettorId\": \"507f1f77bcf86cd799439033\",\n  \"pagadorId\": \"507f1f77bcf86cd799439044\",\n  \"amount\": 5000,\n  \"currency\": \"PHP\",\n  \"status\": \"PENDING\",\n  \"notes\": \"Winning bet 5-12, morning draw\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/juetengPayout",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengPayout"]
+						},
+						"description": "Create a payout for a winning bet. Status: PENDING, PAID, CLAIMED, FAILED, CANCELLED."
+					}
+				},
+				{
+					"name": "Update Payout",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"PAID\",\n  \"pagadorId\": \"507f1f77bcf86cd799439044\",\n  \"paidAt\": \"2026-02-18T12:00:00.000Z\",\n  \"notes\": \"Paid in cash at Brgy. San Antonio hall\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/juetengPayout/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengPayout", "{{id}}"]
+						},
+						"description": "Update payout — mark as PAID/CLAIMED, assign pagador."
+					}
+				},
+				{
+					"name": "Delete Payout",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/juetengPayout/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["juetengPayout", "{{id}}"]
+						},
+						"description": "Delete a payout record."
+					}
+				}
+			]
+		},
+		{
+			"name": "Commission",
+			"description": "Commission records generated during draw settlement for agents.\nTypes: COLLECTION (cobrador), WINNER_BONUS (cabo), CAPITALISTA, FIXED.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Commissions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/commission?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["commission"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all commissions with pagination, filtering (by agent, draw, type)."
+					}
+				},
+				{
+					"name": "Get Commission by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/commission/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["commission", "{{id}}"]
+						},
+						"description": "Get a single commission record by ID."
+					}
+				},
+				{
+					"name": "Create Commission",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"agentId\": \"507f1f77bcf86cd799439011\",\n  \"drawId\": \"507f1f77bcf86cd799439022\",\n  \"type\": \"COLLECTION\",\n  \"rate\": 0.15,\n  \"baseAmount\": 47850,\n  \"amount\": 7177.50,\n  \"status\": \"PENDING\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/commission",
+							"host": ["{{baseUrl}}"],
+							"path": ["commission"]
+						},
+						"description": "Create a commission record. Types: COLLECTION (15%), WINNER_BONUS (5%), CAPITALISTA (25%), FIXED. Status: PENDING, PAID, CANCELLED."
+					}
+				},
+				{
+					"name": "Update Commission",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"PAID\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/commission/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["commission", "{{id}}"]
+						},
+						"description": "Update commission — mark as PAID."
+					}
+				},
+				{
+					"name": "Delete Commission",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/commission/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["commission", "{{id}}"]
+						},
+						"description": "Delete a commission record."
+					}
+				}
+			]
+		},
+		{
+			"name": "Template",
+			"description": "Generic CRUD template model used for testing and scaffolding.\nAll endpoints require authentication.",
+			"item": [
+				{
+					"name": "Get All Templates",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/template?page=1&limit=10&order=desc&sort=createdAt&document=true&pagination=true&count=true",
+							"host": ["{{baseUrl}}"],
+							"path": ["template"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (min: 1)"
+								},
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Records per page (1-100)"
+								},
+								{
+									"key": "order",
+									"value": "desc",
+									"description": "Sort direction: asc | desc"
+								},
+								{
+									"key": "sort",
+									"value": "createdAt",
+									"description": "Sort field name"
+								},
+								{
+									"key": "document",
+									"value": "true",
+									"description": "Include full document data"
+								},
+								{
+									"key": "pagination",
+									"value": "true",
+									"description": "Include pagination metadata"
+								},
+								{
+									"key": "count",
+									"value": "true",
+									"description": "Include total record count"
+								},
+								{
+									"key": "query",
+									"value": "",
+									"description": "Full-text search",
+									"disabled": true
+								},
+								{
+									"key": "fields",
+									"value": "",
+									"description": "Comma-separated field projection",
+									"disabled": true
+								},
+								{
+									"key": "filter",
+									"value": "",
+									"description": "JSON filter array",
+									"disabled": true
+								},
+								{
+									"key": "groupBy",
+									"value": "",
+									"description": "Group results by field",
+									"disabled": true
+								}
+							]
+						},
+						"description": "List all templates with pagination, filtering, sorting."
+					}
+				},
+				{
+					"name": "Get Template by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/template/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["template", "{{id}}"]
+						},
+						"description": "Get a template by ID."
+					}
+				},
+				{
+					"name": "Create Template",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Sample Template\",\n  \"description\": \"A test template for the Jueteng platform\",\n  \"type\": \"default\",\n  \"isDeleted\": false\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/template",
+							"host": ["{{baseUrl}}"],
+							"path": ["template"]
+						},
+						"description": "Create a new template."
+					}
+				},
+				{
+					"name": "Update Template",
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Updated Template\",\n  \"description\": \"Modified description\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/template/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["template", "{{id}}"]
+						},
+						"description": "Update a template."
+					}
+				},
+				{
+					"name": "Delete Template",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/template/{{id}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["template", "{{id}}"]
+						},
+						"description": "Delete a template."
+					}
+				}
+			]
+		},
+		{
+			"name": "Docs",
+			"description": "Auto-generated API documentation endpoints. No authentication required.",
+			"item": [
+				{
+					"name": "Get API List",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/docs/api-list",
+							"host": ["{{baseUrl}}"],
+							"path": ["docs", "api-list"],
+							"query": [
+								{
+									"key": "tag",
+									"value": "",
+									"description": "Filter by module tag",
+									"disabled": true
+								},
+								{
+									"key": "method",
+									"value": "",
+									"description": "Filter by HTTP method (GET, POST, etc.)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get all registered API endpoints as JSON or plain text. Filterable by tag and method."
+					}
+				},
+				{
+					"name": "Get Swagger/OpenAPI Spec",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/docs/swagger",
+							"host": ["{{baseUrl}}"],
+							"path": ["docs", "swagger"]
+						},
+						"description": "Get the OpenAPI 3.0 specification (JSON)."
+					}
+				},
+				{
+					"name": "Get Postman Collection",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/docs/postman",
+							"host": ["{{baseUrl}}"],
+							"path": ["docs", "postman"]
+						},
+						"description": "Get a Postman collection export (JSON)."
+					}
+				},
+				{
+					"name": "Get IML Export",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/docs/iml",
+							"host": ["{{baseUrl}}"],
+							"path": ["docs", "iml"],
+							"query": [
+								{
+									"key": "tag",
+									"value": "",
+									"description": "Filter by module tag",
+									"disabled": true
+								},
+								{
+									"key": "format",
+									"value": "json",
+									"description": "Output format: json | xml",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Generate IML (Integration Markup Language) files. Filterable by tag. Supports JSON and XML."
+					}
+				}
+			]
+		}
+	]
+}

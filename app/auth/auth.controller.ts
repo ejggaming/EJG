@@ -17,6 +17,7 @@ import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/config";
 import { config as constants } from "../../config/constant";
+import { sendOtpEmail, sendWelcomeEmail } from "../../utils/emailService";
 
 const logger = getLogger();
 const authLogger = logger.child({ module: "auth" });
@@ -180,6 +181,30 @@ export const controller = (prisma: PrismaClient) => {
 				description: `User registered: ${user.email}`,
 			});
 
+			// ── Send welcome email ──
+			sendWelcomeEmail(email, firstName).catch((err) =>
+				authLogger.error(`Welcome email failed: ${err}`),
+			);
+
+			// ── Auto-send email verification OTP ──
+			const otpCode = generateOtpCode(config.otp.length);
+			const otpExpiresAt = new Date(Date.now() + config.otp.expiryMinutes * 60 * 1000);
+
+			await prisma.oTP.create({
+				data: {
+					userId: user.id,
+					email,
+					code: otpCode,
+					type: "EMAIL_VERIFICATION" as any,
+					channel: "EMAIL",
+					expiresAt: otpExpiresAt,
+				},
+			});
+
+			sendOtpEmail(email, otpCode, "EMAIL_VERIFICATION", config.otp.expiryMinutes).catch(
+				(err) => authLogger.error(`OTP email failed after registration: ${err}`),
+			);
+
 			const responseData = {
 				user: {
 					id: user.id,
@@ -247,6 +272,37 @@ export const controller = (prisma: PrismaClient) => {
 				authLogger.warn(`Login attempt on ${user.status} account: ${email}`);
 				const errorResponse = buildErrorResponse(
 					`Account is ${user.status}. Please contact support.`,
+					403,
+				);
+				res.status(403).json(errorResponse);
+				return;
+			}
+
+			// Block login if email is not verified
+			if (!user.isEmailVerified) {
+				authLogger.warn(`Login attempt with unverified email: ${email}`);
+
+				// Auto-send new OTP for verification
+				const otpCode = generateOtpCode(config.otp.length);
+				const otpExpiresAt = new Date(Date.now() + config.otp.expiryMinutes * 60 * 1000);
+
+				await prisma.oTP.create({
+					data: {
+						userId: user.id,
+						email,
+						code: otpCode,
+						type: "EMAIL_VERIFICATION" as any,
+						channel: "EMAIL",
+						expiresAt: otpExpiresAt,
+					},
+				});
+
+				sendOtpEmail(email, otpCode, "EMAIL_VERIFICATION", config.otp.expiryMinutes).catch(
+					(err) => authLogger.error(`OTP email failed during login: ${err}`),
+				);
+
+				const errorResponse = buildErrorResponse(
+					"Email not verified. A new OTP verification code has been sent to your inbox.",
 					403,
 				);
 				res.status(403).json(errorResponse);
@@ -691,9 +747,22 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
-			// In production, send OTP via SMS/Email service
-			// For now, log it (remove in production!)
-			authLogger.info(`OTP generated for ${email || phone}: ${code}`);
+			authLogger.info(`OTP generated for ${email || phone}`);
+
+			// ── Send OTP via email ──
+			if (email) {
+				const emailSent = await sendOtpEmail(
+					email,
+					code,
+					type as string,
+					config.otp.expiryMinutes,
+				);
+				if (!emailSent) {
+					authLogger.warn(`OTP email delivery failed for ${email}`);
+				}
+			}
+
+			// TODO: Send OTP via SMS when phone is provided
 
 			const successResponse = buildSuccessResponse("OTP sent successfully", {
 				expiresAt,

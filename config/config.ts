@@ -42,4 +42,12 @@ export const config = {
 		expiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES || "10"),
 		maxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS || "5"),
 	},
+	email: {
+		host: process.env.EMAIL_HOST || "smtp.gmail.com",
+		port: parseInt(process.env.EMAIL_PORT || "587"),
+		secure: process.env.EMAIL_SECURE === "true",
+		user: process.env.EMAIL || "",
+		appPassword: process.env.APP_PASSWORD || "",
+		from: process.env.EMAIL_FROM || process.env.EMAIL || "noreply@jueteng.ph",
+	},
 };
