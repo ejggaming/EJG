@@ -1,0 +1,51 @@
+enum Status {
+  active
+  inactive
+  suspended
+  archived
+}
+
+enum UserRole {
+  PLAYER
+  AGENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+model User {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  personId        String    @db.ObjectId
+  person          Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  avatar          String?
+  userName        String?   @unique
+  email           String    @unique
+  phoneNumber     String?   @unique
+  password        String?
+  role            UserRole  @default(PLAYER)
+  status          Status    @default(active)
+  isDeleted       Boolean   @default(false)
+  isEmailVerified Boolean   @default(false)
+  isPhoneVerified Boolean   @default(false)
+  lastLogin       DateTime?
+  loginMethod     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Core relations
+  wallet         Wallet?
+  transactions   Transaction[]
+  kyc            KYC?
+  sessions       Session[]
+  auditLogs      AuditLog[]
+
+  // Jueteng relations
+  juetengBets    JuetengBet[]    @relation("BettorBets")
+  juetengPayouts JuetengPayout[] @relation("BettorPayouts")
+  agent          Agent?
+
+  // Platform relations
+  notifications    Notification[]
+  otps             OTP[]
+
+  @@map("users")
+}

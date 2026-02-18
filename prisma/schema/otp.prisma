@@ -1,0 +1,34 @@
+enum OtpType {
+  REGISTRATION
+  LOGIN
+  PASSWORD_RESET
+  PHONE_VERIFICATION
+  EMAIL_VERIFICATION
+  WITHDRAWAL
+}
+
+enum OtpChannel {
+  SMS
+  EMAIL
+}
+
+model OTP {
+  id        String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?    @db.ObjectId
+  email     String?
+  phone     String?
+  code      String
+  type      OtpType
+  channel   OtpChannel
+  expiresAt DateTime
+  verified  Boolean    @default(false)
+  attempts  Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([email])
+  @@index([phone])
+  @@index([userId])
+  @@map("otps")
+}

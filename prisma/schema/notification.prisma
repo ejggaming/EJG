@@ -1,0 +1,43 @@
+enum NotificationType {
+  SYSTEM
+  TRANSACTION
+  KYC_UPDATE
+  DRAW_RESULT
+  PAYOUT
+  SECURITY
+  COMMISSION
+}
+
+enum NotificationChannel {
+  IN_APP
+  SMS
+  EMAIL
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  READ
+  FAILED
+}
+
+model Notification {
+  id        String              @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String              @db.ObjectId
+  type      NotificationType
+  title     String
+  body      String
+  channel   NotificationChannel @default(IN_APP)
+  status    NotificationStatus  @default(PENDING)
+  metadata  Json?
+  sentAt    DateTime?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([userId, status])
+  @@map("notifications")
+}

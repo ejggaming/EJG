@@ -1,0 +1,20 @@
+// Global Jueteng game configuration — one active record at a time.
+// payoutMultiplier: winner receives stake × payoutMultiplier (default 500×)
+// wageringRequirement unit: 1 = 1× stake must be wagered before withdrawal
+model JuetengConfig {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  maxNumber        Int      @default(37)   // highest ball in tambiolo (usually 37)
+  allowRepeat      Boolean  @default(true) // same number can appear in both draws
+  payoutMultiplier Float    @default(500)  // 500× payout on winning bet
+  minBet           Float    @default(1)
+  maxBet           Float    @default(1000)
+  cobradorRate     Float    @default(0.15) // 15% of stake goes to collector
+  caboRate         Float    @default(0.05) // 5% of winner payout to supervisor
+  capitalistaRate  Float    @default(0.25) // 25% of total collections to financier
+  currency         String   @default("PHP")
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("jueteng_config")
+}

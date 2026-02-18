@@ -1,0 +1,23 @@
+enum KYCStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REQUIRES_MORE_INFO
+}
+
+model KYC {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String    @unique @db.ObjectId
+  status       KYCStatus @default(PENDING)
+  documentType String
+  documentUrl  String    // Must be a signed cloud storage URL — never a raw file path
+  selfieUrl    String?
+  submittedAt  DateTime  @default(now())
+  reviewedAt   DateTime?
+  reviewedBy   String?   @db.ObjectId // Admin User id
+  notes        String?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("kyc")
+}

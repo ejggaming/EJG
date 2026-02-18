@@ -1,0 +1,33 @@
+enum PayoutStatus {
+  PENDING  // winner identified, cash not yet delivered
+  PAID     // pagador has paid
+  CLAIMED  // bettor confirmed receipt
+  FAILED   // payment attempt failed
+  CANCELLED
+}
+
+model JuetengPayout {
+  id        String       @id @default(auto()) @map("_id") @db.ObjectId
+  betId     String       @unique @db.ObjectId
+  drawId    String       @db.ObjectId
+  bettorId  String       @db.ObjectId
+  pagadorId String?      @db.ObjectId // Agent (PAGADOR) who paid cash
+  amount    Float
+  currency  String       @default("PHP")
+  status    PayoutStatus @default(PENDING)
+  paidAt    DateTime?
+  claimedAt DateTime?
+  notes     String?      // pagador notes — sanitize before rendering in UI
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  bet     JuetengBet  @relation(fields: [betId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  draw    JuetengDraw @relation(fields: [drawId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bettor  User        @relation("BettorPayouts", fields: [bettorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  pagador Agent?      @relation("PagadorPayouts", fields: [pagadorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([drawId])
+  @@index([bettorId])
+  @@index([status])
+  @@map("jueteng_payouts")
+}

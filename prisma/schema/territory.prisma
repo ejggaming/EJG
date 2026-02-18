@@ -1,0 +1,16 @@
+// Geographic area managed by a Cabo and their Cobradors
+model Territory {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  barangay     String?
+  municipality String?
+  province     String?
+  region       String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  agents Agent[]
+
+  @@map("territories")
+}

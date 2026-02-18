@@ -1,0 +1,94 @@
+Endpoint,Method,Auth Required,Status Codes Tested,Validation Tested,Build Pass,Test Pass,Notes
+/,GET,No,200,N/A,PASS,N/A,Health check root
+/health,GET,No,200,N/A,PASS,N/A,Enhanced health check
+/health/redis,GET,No,"200,503",N/A,PASS,N/A,Redis health check
+/api/swagger,GET,No (dev only),200,N/A,PASS,N/A,Swagger UI
+/api/template,GET,Yes,200,Yes,PASS,BLOCKED,Build blocks test execution
+/api/template/:id,GET,Yes,"200,404",Yes,PASS,BLOCKED,Build blocks test execution
+/api/template,POST,Yes,"201,400",Yes,PASS,BLOCKED,Build blocks test execution
+/api/template/:id,PATCH,Yes,"200,400,404",Yes,PASS,BLOCKED,Build blocks test execution
+/api/template/:id,DELETE,Yes,"200,404",Yes,PASS,BLOCKED,Build blocks test execution
+/api/sport,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/sport/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/sport,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/sport/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/sport/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/event,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/event/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/event,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/event/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/event/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/market,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/market/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/market,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/market/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/market/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/bet,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — prisma.bet not found
+/api/bet/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — prisma.bet not found
+/api/bet,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — prisma.bet not found
+/api/bet/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — prisma.bet not found
+/api/bet/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — prisma.bet not found
+/api/wallet,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/wallet/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/wallet,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/wallet/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/wallet/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/promotion,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/promotion/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/promotion,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/promotion/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/promotion/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/kyc,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/kyc/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/kyc,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/kyc/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/kyc/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/session,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/session/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/session,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/session/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/session/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/agent,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/agent/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/agent,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/agent/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/agent/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/territory,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/territory/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/territory,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/territory/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/territory/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/drawSchedule,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/drawSchedule/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/drawSchedule,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/drawSchedule/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/drawSchedule/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengDraw,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengDraw/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengDraw,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengDraw/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengDraw/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengBet,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengBet/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengBet,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengBet/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengBet/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengConfig,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengConfig/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengConfig,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengConfig/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengConfig/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengPayout,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengPayout/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengPayout,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengPayout/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/juetengPayout/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — schema mismatch
+/api/commission,GET,Yes,200,Yes,FAIL,BLOCKED,Controller has TS errors — prisma.commission not found
+/api/commission/:id,GET,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — prisma.commission not found
+/api/commission,POST,Yes,"201,400",Yes,FAIL,BLOCKED,Controller has TS errors — prisma.commission not found
+/api/commission/:id,PATCH,Yes,"200,400,404",Yes,FAIL,BLOCKED,Controller has TS errors — prisma.commission not found
+/api/commission/:id,DELETE,Yes,"200,404",Yes,FAIL,BLOCKED,Controller has TS errors — prisma.commission not found
+/api/docs/api-list,GET,No,200,N/A,PASS,N/A,Docs endpoint
+/api/docs/swagger,GET,No,200,N/A,PASS,N/A,Docs endpoint
+/api/docs/postman,GET,No,200,N/A,PASS,N/A,Docs endpoint
+/api/docs/iml,GET,No,200,N/A,PASS,N/A,Docs endpoint

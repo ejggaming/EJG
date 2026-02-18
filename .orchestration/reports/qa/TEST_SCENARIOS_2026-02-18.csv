@@ -1,0 +1,34 @@
+ID,Scenario,Type,Module,Priority,Expected Result,Actual Result,Status,Notes
+QA-01,Health check root (/),Positive,root,High,200 with status/timestamp/uptime,Cannot verify — build blocks runtime,BLOCKED,Build must pass first
+QA-02,Health check (/health),Positive,root,High,200 with status/timestamp/uptime/message,Cannot verify — build blocks runtime,BLOCKED,Build must pass first
+QA-03,Redis health check (/health/redis),Positive,root,Medium,"200 with redis connected/latency/memoryUsage",Cannot verify — build blocks runtime,BLOCKED,Depends on Redis availability
+QA-04,Template CRUD — Create,Positive,template,High,201 with created template,Cannot verify — build blocks runtime,BLOCKED,Only clean-compiling CRUD controller
+QA-05,Template CRUD — List,Positive,template,High,200 with paginated templates,Cannot verify — build blocks runtime,BLOCKED,
+QA-06,Template CRUD — Get by ID,Positive,template,High,200 with single template,Cannot verify — build blocks runtime,BLOCKED,
+QA-07,Template CRUD — Update,Positive,template,High,200 with updated template,Cannot verify — build blocks runtime,BLOCKED,
+QA-08,Template CRUD — Delete,Positive,template,High,200 with deleted confirmation,Cannot verify — build blocks runtime,BLOCKED,
+QA-09,Template — Invalid create payload,Negative,template,High,400 validation error,Cannot verify — build blocks runtime,BLOCKED,Zod validation
+QA-10,Template — Get non-existent ID,Negative,template,High,404 not found,Cannot verify — build blocks runtime,BLOCKED,
+QA-11,Template — Unauthorized access,Security,template,High,401 no token,Cannot verify — build blocks runtime,BLOCKED,verifyToken middleware
+QA-12,Agent CRUD — Create,Positive,agent,High,201 with created agent,FAIL — TS2322 compile error,FAIL,Controller field mismatch with Prisma model
+QA-13,Agent CRUD — List,Positive,agent,High,200 with paginated agents,FAIL — TS2339 compile error,FAIL,Controller references name/description not in model
+QA-14,Bet CRUD — Create,Positive,bet,High,201 with created bet,FAIL — TS2339 prisma.bet not found,FAIL,Model name mismatch in Prisma client
+QA-15,Bet CRUD — List,Positive,bet,High,200 with paginated bets,FAIL — TS2339 prisma.bet not found,FAIL,
+QA-16,Commission CRUD — Create,Positive,commission,High,201 created,FAIL — TS2339 prisma.commission not found,FAIL,Model name mismatch in Prisma client
+QA-17,Wallet CRUD — Create,Positive,wallet,High,201 created,FAIL — TS2339/TS2322 compile errors,FAIL,Controller field mismatch
+QA-18,Sport CRUD — Create,Positive,sport,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-19,Event CRUD — Create,Positive,event,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-20,Market CRUD — Create,Positive,market,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-21,KYC CRUD — Create,Positive,kyc,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-22,Session CRUD — Create,Positive,session,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-23,Promotion CRUD — Create,Positive,promotion,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-24,Territory CRUD — Create,Positive,territory,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-25,DrawSchedule CRUD — Create,Positive,drawSchedule,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-26,JuetengDraw CRUD — Create,Positive,juetengDraw,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-27,JuetengBet CRUD — Create,Positive,juetengBet,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-28,JuetengConfig CRUD — Create,Positive,juetengConfig,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-29,JuetengPayout CRUD — Create,Positive,juetengPayout,High,201 created,FAIL — compile errors,FAIL,Controller field mismatch
+QA-30,Docs — API list,Positive,docs,Medium,200 with API list,Cannot verify — build blocks runtime,BLOCKED,Skips auth
+QA-31,Swagger UI (dev),Positive,docs,Low,200 Swagger page,Cannot verify — build blocks runtime,BLOCKED,Dev only
+QA-32,Protected route without token,Security,all,High,401 unauthorized,Cannot verify — build blocks runtime,BLOCKED,
+QA-33,Lint check passes,Quality,all,Medium,ESLint clean exit,FAIL — lib-entry.ts not found,FAIL,Lint script broken

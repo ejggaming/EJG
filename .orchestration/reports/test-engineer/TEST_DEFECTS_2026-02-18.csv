@@ -1,0 +1,23 @@
+ID,Severity,Category,File,Line,Error Code,Description,Status,Assigned To
+DEF-001,CRITICAL,Schema Mismatch,app/agent/agent.controller.ts,59,TS2322,"Create input type mismatch — controller passes {name,type,description,isDeleted} but Agent model does not have these fields",OPEN,@BACKEND_DEVELOPER
+DEF-002,CRITICAL,Schema Mismatch,app/agent/agent.controller.ts,"65,82,87",TS2339,"Property 'name' and 'description' do not exist on Agent model return type",OPEN,@BACKEND_DEVELOPER
+DEF-003,CRITICAL,Schema Mismatch,app/agent/agent.controller.ts,145,TS2353,"'isDeleted' does not exist in AgentWhereInput — soft delete filter invalid",OPEN,@BACKEND_DEVELOPER
+DEF-004,CRITICAL,Schema Mismatch,app/agent/agent.controller.ts,312,TS2322,"Update input type mismatch — controller passes {name,type,description} but Agent model does not have these fields",OPEN,@BACKEND_DEVELOPER
+DEF-005,CRITICAL,Schema Mismatch,app/bet/bet.controller.ts,multiple,TS2339,"'prisma.bet' does not exist on PrismaClient — model name mismatch (8 occurrences)",OPEN,@DATABASE_ARCHITECT
+DEF-006,CRITICAL,Schema Mismatch,app/commission/commission.controller.ts,multiple,TS2339,"'prisma.commission' does not exist on PrismaClient — model name mismatch",OPEN,@DATABASE_ARCHITECT
+DEF-007,CRITICAL,Schema Mismatch,app/sport/sport.controller.ts,multiple,TS2339,"Property 'name' does not exist on Sport model return type",OPEN,@BACKEND_DEVELOPER
+DEF-008,CRITICAL,Schema Mismatch,app/event/event.controller.ts,multiple,TS2339,"Property 'name'/'description' does not exist on Event model return type",OPEN,@BACKEND_DEVELOPER
+DEF-009,CRITICAL,Schema Mismatch,app/market/market.controller.ts,multiple,TS2339,"Property 'name'/'description' does not exist on Market model return type",OPEN,@BACKEND_DEVELOPER
+DEF-010,CRITICAL,Schema Mismatch,app/wallet/wallet.controller.ts,"82,83",TS2339,"Property 'name'/'description' does not exist on Wallet model return type",OPEN,@BACKEND_DEVELOPER
+DEF-011,CRITICAL,Schema Mismatch,app/wallet/wallet.controller.ts,145,TS2353,"'isDeleted' does not exist in WalletWhereInput",OPEN,@BACKEND_DEVELOPER
+DEF-012,CRITICAL,Schema Mismatch,app/wallet/wallet.controller.ts,312,TS2322,"Update input type mismatch for Wallet model",OPEN,@BACKEND_DEVELOPER
+DEF-013,CRITICAL,Schema Mismatch,app/promotion/promotion.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-014,CRITICAL,Schema Mismatch,app/kyc/kyc.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-015,CRITICAL,Schema Mismatch,app/session/session.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-016,CRITICAL,Schema Mismatch,app/territory/territory.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-017,CRITICAL,Schema Mismatch,app/drawSchedule/drawSchedule.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-018,CRITICAL,Schema Mismatch,app/juetengDraw/juetengDraw.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-019,CRITICAL,Schema Mismatch,app/juetengBet/juetengBet.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-020,CRITICAL,Schema Mismatch,app/juetengConfig/juetengConfig.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-021,CRITICAL,Schema Mismatch,app/juetengPayout/juetengPayout.controller.ts,multiple,TS2339,"Schema/controller field mismatch",OPEN,@BACKEND_DEVELOPER
+DEF-022,MEDIUM,Lint Config,package.json (lint script),N/A,ESLint,"Lint script references non-existent 'lib-entry.ts' file causing ESLint to abort",OPEN,@BACKEND_DEVELOPER

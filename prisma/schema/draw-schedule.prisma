@@ -1,0 +1,20 @@
+enum DrawType {
+  MORNING   // ~11:00 AM Asia/Manila
+  AFTERNOON // ~4:00 PM Asia/Manila
+}
+
+// Defines the recurring daily draw schedule (morning + afternoon)
+model DrawSchedule {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  drawType      DrawType @unique
+  scheduledTime String   // "11:00" or "16:00" (24h format)
+  cutoffMinutes Int      @default(5) // minutes before draw when bets close
+  timeZone      String   @default("Asia/Manila")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  draws JuetengDraw[]
+
+  @@map("draw_schedules")
+}

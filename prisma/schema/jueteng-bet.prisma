@@ -1,0 +1,40 @@
+enum JuetengBetStatus {
+  PENDING  // draw not yet settled
+  WON      // combination matched drawn numbers
+  LOST     // combination did not match
+  VOID     // draw cancelled, bet voided
+  REFUNDED
+}
+
+model JuetengBet {
+  id             String           @id @default(auto()) @map("_id") @db.ObjectId
+  drawId         String           @db.ObjectId
+  bettorId       String           @db.ObjectId // User (player)
+  cobradorId     String           @db.ObjectId // Agent (COBRADOR) who collected
+  caboId         String?          @db.ObjectId // Agent (CABO) supervising cobrador
+  number1        Int              // first chosen number (1–maxNumber)
+  number2        Int              // second chosen number (1–maxNumber)
+  combinationKey String           // sorted "min-max" key e.g. "5-12" for O(1) winner check
+  amount         Float            // stake in PHP
+  currency       String           @default("PHP")
+  status         JuetengBetStatus @default(PENDING)
+  isWinner       Boolean          @default(false)
+  payoutAmount   Float?           // amount × payoutMultiplier if won, null if pending/lost
+  reference      String           @unique // e.g. "20260218-MRN-00001"
+  placedAt       DateTime         @default(now())
+  settledAt      DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  draw     JuetengDraw    @relation(fields: [drawId], references: [id])
+  bettor   User           @relation("BettorBets", fields: [bettorId], references: [id])
+  cobrador Agent          @relation("CobradorBets", fields: [cobradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cabo     Agent?         @relation("CaboBets", fields: [caboId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payout   JuetengPayout?
+
+  @@index([drawId])
+  @@index([bettorId])
+  @@index([cobradorId])
+  @@index([combinationKey]) // used during settlement to find all winners in one query
+  @@map("jueteng_bets")
+}

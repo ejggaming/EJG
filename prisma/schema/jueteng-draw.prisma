@@ -1,0 +1,43 @@
+enum DrawStatus {
+  SCHEDULED // upcoming, not yet open for bets
+  OPEN      // accepting bets
+  CLOSED    // cutoff reached, draw pending
+  DRAWN     // tambiolo operated, numbers set, settlement pending
+  SETTLED   // all payouts and commissions processed
+  CANCELLED
+}
+
+// A single draw instance — created once per schedule per day
+model JuetengDraw {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+  scheduleId     String     @db.ObjectId
+  drawDate       DateTime   // date portion of this draw (midnight UTC)
+  drawType       DrawType
+  status         DrawStatus @default(SCHEDULED)
+  scheduledAt    DateTime   // exact datetime of draw
+  openedAt       DateTime?  // when bets were opened
+  closedAt       DateTime?  // when bets were cut off
+  drawnAt        DateTime?  // when tambiolo results were entered
+  settledAt      DateTime?  // when settlement completed
+  number1        Int?       // first ball drawn (1–maxNumber)
+  number2        Int?       // second ball drawn (1–maxNumber)
+  combinationKey String?    // sorted key e.g. "5-12" for fast winner lookup
+  boladorId      String?    @db.ObjectId // Agent (BOLADOR) who ran the draw
+  totalBets      Int        @default(0)
+  totalStake     Float      @default(0)
+  totalPayout    Float      @default(0)
+  grossProfit    Float      @default(0)  // totalStake - totalPayout
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  schedule    DrawSchedule     @relation(fields: [scheduleId], references: [id])
+  bolador     Agent?           @relation("BoladorDraws", fields: [boladorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  bets        JuetengBet[]
+  payouts     JuetengPayout[]
+  commissions DrawCommission[]
+
+  @@index([drawDate, drawType])
+  @@index([status])
+  @@index([combinationKey])
+  @@map("jueteng_draws")
+}

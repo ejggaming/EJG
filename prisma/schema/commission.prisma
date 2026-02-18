@@ -1,0 +1,33 @@
+enum CommissionType {
+  COLLECTION   // % of total stake collected (cobrador)
+  WINNER_BONUS // % of winner payout (cabo)
+  CAPITALISTA  // % of total collections (financier)
+  FIXED        // fixed salary (bolador / pagador)
+}
+
+enum CommissionStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model DrawCommission {
+  id         String           @id @default(auto()) @map("_id") @db.ObjectId
+  agentId    String           @db.ObjectId
+  drawId     String           @db.ObjectId
+  type       CommissionType
+  rate       Float            // e.g. 0.15 for 15%
+  baseAmount Float            // the amount the rate was applied to
+  amount     Float            // actual commission earned (baseAmount × rate)
+  status     CommissionStatus @default(PENDING)
+  paidAt     DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  agent Agent       @relation(fields: [agentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  draw  JuetengDraw @relation(fields: [drawId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([agentId])
+  @@index([drawId])
+  @@map("draw_commissions")
+}
