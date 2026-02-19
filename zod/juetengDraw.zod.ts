@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+// Schema for POST /:id/result — bolador records the two drawn balls
+export const RecordResultSchema = z.object({
+	number1: z.number().int().min(1),
+	number2: z.number().int().min(1),
+	boladorId: z.string().optional(),
+});
+
+export type RecordResult = z.infer<typeof RecordResultSchema>;
+
 // Create JuetengDraw Schema
 export const CreateJuetengDrawSchema = z.object({
 	scheduleId: z.string().min(1),

@@ -7,6 +7,11 @@ interface IController {
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
+	// Draw lifecycle actions
+	open(req: Request, res: Response, next: NextFunction): Promise<void>;
+	close(req: Request, res: Response, next: NextFunction): Promise<void>;
+	recordResult(req: Request, res: Response, next: NextFunction): Promise<void>;
+	settle(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -421,6 +426,123 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.delete("/:id", controller.remove);
+
+	/**
+	 * @openapi
+	 * /api/juetengDraw/{id}/open:
+	 *   post:
+	 *     summary: Open a draw for betting
+	 *     description: Transitions draw from SCHEDULED → OPEN, allowing bets to be placed.
+	 *     tags: [JuetengDraw]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *     responses:
+	 *       200:
+	 *         description: Draw opened successfully
+	 *       422:
+	 *         description: Draw is not in SCHEDULED status
+	 */
+	routes.post("/:id/open", controller.open);
+
+	/**
+	 * @openapi
+	 * /api/juetengDraw/{id}/close:
+	 *   post:
+	 *     summary: Close a draw (cutoff)
+	 *     description: Transitions draw from OPEN → CLOSED, stopping bet acceptance.
+	 *     tags: [JuetengDraw]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *     responses:
+	 *       200:
+	 *         description: Draw closed successfully
+	 *       422:
+	 *         description: Draw is not in OPEN status
+	 */
+	routes.post("/:id/close", controller.close);
+
+	/**
+	 * @openapi
+	 * /api/juetengDraw/{id}/result:
+	 *   post:
+	 *     summary: Record tambiolo draw result
+	 *     description: |
+	 *       Transitions draw from CLOSED → DRAWN.
+	 *       Bolador records the two drawn balls. combinationKey is auto-computed
+	 *       as sorted "min-max" (e.g. balls 12 and 5 → "5-12").
+	 *     tags: [JuetengDraw]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required: [number1, number2]
+	 *             properties:
+	 *               number1:
+	 *                 type: integer
+	 *                 minimum: 1
+	 *                 example: 12
+	 *               number2:
+	 *                 type: integer
+	 *                 minimum: 1
+	 *                 example: 5
+	 *               boladorId:
+	 *                 type: string
+	 *                 description: Agent ID of the bolador who ran the tambiolo
+	 *     responses:
+	 *       200:
+	 *         description: Draw result recorded successfully
+	 *       422:
+	 *         description: Draw is not in CLOSED status
+	 */
+	routes.post("/:id/result", controller.recordResult);
+
+	/**
+	 * @openapi
+	 * /api/juetengDraw/{id}/settle:
+	 *   post:
+	 *     summary: Settle a draw
+	 *     description: |
+	 *       Transitions draw from DRAWN → SETTLED.
+	 *       Identifies winners (bets matching combinationKey), creates JuetengPayout records,
+	 *       and calculates DrawCommissions for cobradors (15%), cabos (5%), and capitalistas (25%).
+	 *     tags: [JuetengDraw]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *     responses:
+	 *       200:
+	 *         description: Draw settled — returns winner count, totals, and gross profit
+	 *       422:
+	 *         description: Draw is not in DRAWN status
+	 */
+	routes.post("/:id/settle", controller.settle);
 
 	route.use(path, routes);
 

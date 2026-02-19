@@ -12,7 +12,11 @@ import {
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
 import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler";
-import { CreateJuetengDrawSchema, UpdateJuetengDrawSchema } from "../../zod/juetengDraw.zod";
+import {
+	CreateJuetengDrawSchema,
+	UpdateJuetengDrawSchema,
+	RecordResultSchema,
+} from "../../zod/juetengDraw.zod";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
@@ -404,5 +408,344 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { create, getAll, getById, update, remove };
+	// ─── Draw Lifecycle Actions ───────────────────────────────────────────────
+
+	/** SCHEDULED → OPEN: start accepting bets */
+	const open = async (req: Request, res: Response, _next: NextFunction) => {
+		const id = toSingleString(req.params.id);
+		if (!id) {
+			res.status(400).json(buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400));
+			return;
+		}
+		try {
+			const draw = await prisma.juetengDraw.findFirst({ where: { id } });
+			if (!draw) {
+				res.status(404).json(buildErrorResponse(config.ERROR.JUETENGDRAW.NOT_FOUND, 404));
+				return;
+			}
+			if (draw.status !== "SCHEDULED") {
+				res.status(422).json(
+					buildErrorResponse("Draw must be in SCHEDULED status to open.", 422),
+				);
+				return;
+			}
+			const updated = await prisma.juetengDraw.update({
+				where: { id },
+				data: { status: "OPEN", openedAt: new Date() },
+			});
+			await invalidateCache.byPattern(`cache:juetengDraw:byId:${id}:*`).catch(() => {});
+			await invalidateCache.byPattern("cache:juetengDraw:list:*").catch(() => {});
+			res.status(200).json(
+				buildSuccessResponse("Draw opened — bets are now accepted.", updated, 200),
+			);
+		} catch (error) {
+			juetengDrawLogger.error(`Error opening draw ${id}: ${error}`);
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
+		}
+	};
+
+	/** OPEN → CLOSED: cutoff reached, stop accepting bets */
+	const close = async (req: Request, res: Response, _next: NextFunction) => {
+		const id = toSingleString(req.params.id);
+		if (!id) {
+			res.status(400).json(buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400));
+			return;
+		}
+		try {
+			const draw = await prisma.juetengDraw.findFirst({ where: { id } });
+			if (!draw) {
+				res.status(404).json(buildErrorResponse(config.ERROR.JUETENGDRAW.NOT_FOUND, 404));
+				return;
+			}
+			if (draw.status !== "OPEN") {
+				res.status(422).json(
+					buildErrorResponse("Draw must be in OPEN status to close.", 422),
+				);
+				return;
+			}
+			const updated = await prisma.juetengDraw.update({
+				where: { id },
+				data: { status: "CLOSED", closedAt: new Date() },
+			});
+			await invalidateCache.byPattern(`cache:juetengDraw:byId:${id}:*`).catch(() => {});
+			await invalidateCache.byPattern("cache:juetengDraw:list:*").catch(() => {});
+			res.status(200).json(
+				buildSuccessResponse("Draw closed — no more bets accepted.", updated, 200),
+			);
+		} catch (error) {
+			juetengDrawLogger.error(`Error closing draw ${id}: ${error}`);
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
+		}
+	};
+
+	/** CLOSED → DRAWN: bolador records the two tambiolo balls */
+	const recordResult = async (req: Request, res: Response, _next: NextFunction) => {
+		const id = toSingleString(req.params.id);
+		if (!id) {
+			res.status(400).json(buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400));
+			return;
+		}
+
+		const validation = RecordResultSchema.safeParse(req.body);
+		if (!validation.success) {
+			const formattedErrors = formatZodErrors(validation.error.format());
+			res.status(400).json(buildErrorResponse("Validation failed", 400, formattedErrors));
+			return;
+		}
+
+		const { number1, number2, boladorId } = validation.data;
+
+		try {
+			const draw = await prisma.juetengDraw.findFirst({ where: { id } });
+			if (!draw) {
+				res.status(404).json(buildErrorResponse(config.ERROR.JUETENGDRAW.NOT_FOUND, 404));
+				return;
+			}
+			if (draw.status !== "CLOSED") {
+				res.status(422).json(
+					buildErrorResponse("Draw must be in CLOSED status to record result.", 422),
+				);
+				return;
+			}
+
+			const gameConfig = await prisma.juetengConfig.findFirst({ where: { isActive: true } });
+			if (!gameConfig) {
+				res.status(503).json(buildErrorResponse("Game configuration unavailable", 503));
+				return;
+			}
+			if (
+				number1 < 1 ||
+				number1 > gameConfig.maxNumber ||
+				number2 < 1 ||
+				number2 > gameConfig.maxNumber
+			) {
+				res.status(400).json(
+					buildErrorResponse(
+						`Drawn numbers must be between 1 and ${gameConfig.maxNumber}`,
+						400,
+					),
+				);
+				return;
+			}
+
+			const combinationKey = [number1, number2].sort((a, b) => a - b).join("-");
+
+			const updated = await prisma.juetengDraw.update({
+				where: { id },
+				data: {
+					status: "DRAWN",
+					drawnAt: new Date(),
+					number1,
+					number2,
+					combinationKey,
+					...(boladorId ? { boladorId } : {}),
+				},
+			});
+			await invalidateCache.byPattern(`cache:juetengDraw:byId:${id}:*`).catch(() => {});
+			await invalidateCache.byPattern("cache:juetengDraw:list:*").catch(() => {});
+			res.status(200).json(
+				buildSuccessResponse(
+					`Draw result recorded: ${combinationKey}. Ready to settle.`,
+					updated,
+					200,
+				),
+			);
+		} catch (error) {
+			juetengDrawLogger.error(`Error recording result for draw ${id}: ${error}`);
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
+		}
+	};
+
+	/**
+	 * DRAWN → SETTLED: determine winners, create payouts, calculate commissions.
+	 *
+	 * Commission rules (from JuetengConfig):
+	 *   - Cobrador (COLLECTION):  cobradorRate × their collected stake
+	 *   - Cabo (WINNER_BONUS):    caboRate × winner payouts from supervised bets
+	 *   - Capitalista (CAPITALISTA): capitalistaRate × total draw stake
+	 */
+	const settle = async (req: Request, res: Response, _next: NextFunction) => {
+		const id = toSingleString(req.params.id);
+		if (!id) {
+			res.status(400).json(buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400));
+			return;
+		}
+
+		try {
+			const draw = await prisma.juetengDraw.findFirst({ where: { id } });
+			if (!draw) {
+				res.status(404).json(buildErrorResponse(config.ERROR.JUETENGDRAW.NOT_FOUND, 404));
+				return;
+			}
+			if (draw.status !== "DRAWN") {
+				res.status(422).json(
+					buildErrorResponse(
+						"Draw must be in DRAWN status to settle. Record the result first.",
+						422,
+					),
+				);
+				return;
+			}
+			if (!draw.combinationKey) {
+				res.status(422).json(
+					buildErrorResponse("Draw is missing combinationKey. Record the result first.", 422),
+				);
+				return;
+			}
+
+			const gameConfig = await prisma.juetengConfig.findFirst({ where: { isActive: true } });
+			if (!gameConfig) {
+				res.status(503).json(buildErrorResponse("Game configuration unavailable", 503));
+				return;
+			}
+
+			const drawnKey = draw.combinationKey;
+			const settledAt = new Date();
+
+			// Fetch all bets for this draw
+			const allBets = await prisma.juetengBet.findMany({ where: { drawId: id } });
+
+			const winningBets = allBets.filter((b) => b.combinationKey === drawnKey);
+			const losingBets = allBets.filter((b) => b.combinationKey !== drawnKey);
+
+			// Aggregate totals
+			const totalStake = allBets.reduce((sum, b) => sum + b.amount, 0);
+			const totalPayout = winningBets.reduce(
+				(sum, b) => sum + b.amount * gameConfig.payoutMultiplier,
+				0,
+			);
+			const grossProfit = totalStake - totalPayout;
+
+			// Create payouts and mark winning bets
+			for (const bet of winningBets) {
+				const payoutAmount = bet.amount * gameConfig.payoutMultiplier;
+				await prisma.juetengPayout.create({
+					data: {
+						betId: bet.id,
+						drawId: id,
+						bettorId: bet.bettorId,
+						amount: payoutAmount,
+						currency: bet.currency,
+						status: "PENDING",
+					},
+				});
+				await prisma.juetengBet.update({
+					where: { id: bet.id },
+					data: { isWinner: true, status: "WON", payoutAmount, settledAt },
+				});
+			}
+
+			// Mark losing bets
+			if (losingBets.length > 0) {
+				await prisma.juetengBet.updateMany({
+					where: { drawId: id, combinationKey: { not: drawnKey } },
+					data: { status: "LOST", settledAt },
+				});
+			}
+
+			// ── Cobrador commissions: cobradorRate % of their collected stake ──
+			const stakeByCobradorId = allBets.reduce<Record<string, number>>((acc, bet) => {
+				acc[bet.cobradorId] = (acc[bet.cobradorId] ?? 0) + bet.amount;
+				return acc;
+			}, {});
+			for (const [cobradorId, baseAmount] of Object.entries(stakeByCobradorId)) {
+				const rate = gameConfig.cobradorRate;
+				await prisma.drawCommission.create({
+					data: {
+						agentId: cobradorId,
+						drawId: id,
+						type: "COLLECTION",
+						rate,
+						baseAmount,
+						amount: baseAmount * rate,
+					},
+				});
+			}
+
+			// ── Cabo commissions: caboRate % of winner payouts under their bets ──
+			const payoutByCaboId = winningBets.reduce<Record<string, number>>((acc, bet) => {
+				if (bet.caboId) {
+					const payout = bet.amount * gameConfig.payoutMultiplier;
+					acc[bet.caboId] = (acc[bet.caboId] ?? 0) + payout;
+				}
+				return acc;
+			}, {});
+			for (const [caboId, baseAmount] of Object.entries(payoutByCaboId)) {
+				const rate = gameConfig.caboRate;
+				await prisma.drawCommission.create({
+					data: {
+						agentId: caboId,
+						drawId: id,
+						type: "WINNER_BONUS",
+						rate,
+						baseAmount,
+						amount: baseAmount * rate,
+					},
+				});
+			}
+
+			// ── Capitalista commissions: capitalistaRate % of total stake ──
+			const capitalistaAgents = await prisma.agent.findMany({
+				where: { role: "CAPITALISTA", isActive: true },
+			});
+			for (const agent of capitalistaAgents) {
+				const rate = gameConfig.capitalistaRate;
+				await prisma.drawCommission.create({
+					data: {
+						agentId: agent.id,
+						drawId: id,
+						type: "CAPITALISTA",
+						rate,
+						baseAmount: totalStake,
+						amount: totalStake * rate,
+					},
+				});
+			}
+
+			// Finalize draw record
+			const settledDraw = await prisma.juetengDraw.update({
+				where: { id },
+				data: {
+					status: "SETTLED",
+					settledAt,
+					totalBets: allBets.length,
+					totalStake,
+					totalPayout,
+					grossProfit,
+				},
+			});
+
+			await invalidateCache.byPattern(`cache:juetengDraw:byId:${id}:*`).catch(() => {});
+			await invalidateCache.byPattern("cache:juetengDraw:list:*").catch(() => {});
+			await invalidateCache.byPattern("cache:juetengBet:list:*").catch(() => {});
+
+			juetengDrawLogger.info(
+				`Draw ${id} settled — winners: ${winningBets.length}/${allBets.length}, payout: ₱${totalPayout}`,
+			);
+
+			res.status(200).json(
+				buildSuccessResponse("Draw settled successfully.", {
+					draw: settledDraw,
+					winnerCount: winningBets.length,
+					totalBets: allBets.length,
+					totalStake,
+					totalPayout,
+					grossProfit,
+				}, 200),
+			);
+		} catch (error) {
+			juetengDrawLogger.error(`Error settling draw ${id}: ${error}`);
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
+		}
+	};
+
+	return { create, getAll, getById, update, remove, open, close, recordResult, settle };
 };

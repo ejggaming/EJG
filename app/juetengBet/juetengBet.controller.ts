@@ -29,6 +29,11 @@ const toSingleString = (v: unknown): string | undefined => {
 	return undefined;
 };
 
+/** Build sorted combinationKey: (5,12) and (12,5) both become "5-12" */
+function buildCombinationKey(n1: number, n2: number): string {
+	return [n1, n2].sort((a, b) => a - b).join("-");
+}
+
 export const controller = (prisma: PrismaClient) => {
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
 		let requestData = req.body;
@@ -50,13 +55,93 @@ export const controller = (prisma: PrismaClient) => {
 		if (!validation.success) {
 			const formattedErrors = formatZodErrors(validation.error.format());
 			juetengBetLogger.error(`Validation failed: ${JSON.stringify(formattedErrors)}`);
-			const errorResponse = buildErrorResponse("Validation failed", 400, formattedErrors);
-			res.status(400).json(errorResponse);
+			res.status(400).json(buildErrorResponse("Validation failed", 400, formattedErrors));
 			return;
 		}
 
+		const { drawId, bettorId, cobradorId, caboId, number1, number2, amount, currency } =
+			validation.data;
+
 		try {
-			const juetengBet = await prisma.juetengBet.create({ data: validation.data });
+			// 1. Fetch active game config
+			const gameConfig = await prisma.juetengConfig.findFirst({ where: { isActive: true } });
+			if (!gameConfig) {
+				juetengBetLogger.error("No active JuetengConfig found");
+				res.status(503).json(
+					buildErrorResponse("Game configuration unavailable", 503),
+				);
+				return;
+			}
+
+			// 2. Validate draw exists and is OPEN
+			const draw = await prisma.juetengDraw.findFirst({ where: { id: drawId } });
+			if (!draw) {
+				res.status(404).json(
+					buildErrorResponse(config.ERROR.JUETENGDRAW.NOT_FOUND, 404),
+				);
+				return;
+			}
+			if (draw.status !== "OPEN") {
+				res.status(422).json(
+					buildErrorResponse("Draw is not accepting bets. Status must be OPEN.", 422),
+				);
+				return;
+			}
+
+			// 3. Validate numbers are within the configured range (1–maxNumber)
+			if (
+				number1 < 1 ||
+				number1 > gameConfig.maxNumber ||
+				number2 < 1 ||
+				number2 > gameConfig.maxNumber
+			) {
+				res.status(400).json(
+					buildErrorResponse(
+						`Numbers must be between 1 and ${gameConfig.maxNumber}`,
+						400,
+					),
+				);
+				return;
+			}
+
+			// 4. Validate bet amount within configured limits
+			if (amount < gameConfig.minBet || amount > gameConfig.maxBet) {
+				res.status(400).json(
+					buildErrorResponse(
+						`Bet amount must be between ₱${gameConfig.minBet} and ₱${gameConfig.maxBet}`,
+						400,
+					),
+				);
+				return;
+			}
+
+			// 5. Auto-generate order-independent combinationKey e.g. "5-12"
+			const combinationKey = buildCombinationKey(number1, number2);
+
+			// 6. Auto-generate unique reference: YYYYMMDD-{MRN|AFT}-{SEQ}
+			const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+			const typeAbbr = draw.drawType === "MORNING" ? "MRN" : "AFT";
+			const betCount = await prisma.juetengBet.count({ where: { drawId } });
+			const seq = String(betCount + 1).padStart(5, "0");
+			const reference = `${dateStr}-${typeAbbr}-${seq}`;
+
+			// 7. Create the bet with server-computed fields
+			const juetengBet = await prisma.juetengBet.create({
+				data: {
+					drawId,
+					bettorId,
+					cobradorId,
+					caboId,
+					number1,
+					number2,
+					combinationKey,
+					amount,
+					currency: currency ?? "PHP",
+					status: "PENDING",
+					isWinner: false,
+					reference,
+				},
+			});
 			juetengBetLogger.info(`JuetengBet created successfully: ${juetengBet.id}`);
 
 			logActivity(req, {
@@ -81,8 +166,8 @@ export const controller = (prisma: PrismaClient) => {
 					id: juetengBet.id,
 					status: juetengBet.status,
 					reference: juetengBet.reference,
+					combinationKey: juetengBet.combinationKey,
 					createdAt: juetengBet.createdAt,
-					updatedAt: juetengBet.updatedAt,
 				},
 				description: `${config.AUDIT_LOG.JUETENGBET.DESCRIPTIONS.JUETENGBET_CREATED}: ${juetengBet.id}`,
 			});
@@ -97,21 +182,17 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
-			const successResponse = buildSuccessResponse(
-				config.SUCCESS.JUETENGBET.CREATED,
-				juetengBet,
-				201,
+			res.status(201).json(
+				buildSuccessResponse(config.SUCCESS.JUETENGBET.CREATED, juetengBet, 201),
 			);
-			res.status(201).json(successResponse);
 		} catch (error) {
 			juetengBetLogger.error(`${config.ERROR.JUETENGBET.CREATE_FAILED}: ${error}`);
-			const errorResponse = buildErrorResponse(
-				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,
-				500,
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
 			);
-			res.status(500).json(errorResponse);
 		}
 	};
+
 	const getAll = async (req: Request, res: Response, _next: NextFunction) => {
 		const validationResult = validateQueryParams(req, juetengBetLogger);
 
@@ -140,7 +221,6 @@ export const controller = (prisma: PrismaClient) => {
 		);
 
 		try {
-			// Base where clause
 			const whereClause: Prisma.JuetengBetWhereInput = {};
 
 			const searchFields = ["status", "combinationKey", "reference"];
@@ -187,6 +267,7 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 	};
+
 	const getById = async (req: Request, res: Response, _next: NextFunction) => {
 		const id = toSingleString(req.params.id);
 		const fields = toSingleString(req.query.fields);
@@ -194,8 +275,9 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			if (!id) {
 				juetengBetLogger.error(config.ERROR.QUERY_PARAMS.MISSING_ID);
-				const errorResponse = buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400);
-				res.status(400).json(errorResponse);
+				res.status(400).json(
+					buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400),
+				);
 				return;
 			}
 
@@ -219,12 +301,8 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			if (!juetengBet) {
-				const query: Prisma.JuetengBetFindFirstArgs = {
-					where: { id },
-				};
-
+				const query: Prisma.JuetengBetFindFirstArgs = { where: { id } };
 				query.select = getNestedFields(fields);
-
 				juetengBet = await prisma.juetengBet.findFirst(query);
 
 				if (juetengBet && redisClient.isClientConnected()) {
@@ -242,27 +320,21 @@ export const controller = (prisma: PrismaClient) => {
 
 			if (!juetengBet) {
 				juetengBetLogger.error(`${config.ERROR.JUETENGBET.NOT_FOUND}: ${id}`);
-				const errorResponse = buildErrorResponse(config.ERROR.JUETENGBET.NOT_FOUND, 404);
-				res.status(404).json(errorResponse);
+				res.status(404).json(buildErrorResponse(config.ERROR.JUETENGBET.NOT_FOUND, 404));
 				return;
 			}
 
 			juetengBetLogger.info(
 				`${config.SUCCESS.JUETENGBET.RETRIEVED}: ${(juetengBet as any).id}`,
 			);
-			const successResponse = buildSuccessResponse(
-				config.SUCCESS.JUETENGBET.RETRIEVED,
-				juetengBet,
-				200,
+			res.status(200).json(
+				buildSuccessResponse(config.SUCCESS.JUETENGBET.RETRIEVED, juetengBet, 200),
 			);
-			res.status(200).json(successResponse);
 		} catch (error) {
 			juetengBetLogger.error(`${config.ERROR.JUETENGBET.ERROR_GETTING}: ${error}`);
-			const errorResponse = buildErrorResponse(
-				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,
-				500,
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
 			);
-			res.status(500).json(errorResponse);
 		}
 	};
 
@@ -272,8 +344,9 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			if (!id) {
 				juetengBetLogger.error(config.ERROR.QUERY_PARAMS.MISSING_ID);
-				const errorResponse = buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400);
-				res.status(400).json(errorResponse);
+				res.status(400).json(
+					buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400),
+				);
 				return;
 			}
 
@@ -282,38 +355,29 @@ export const controller = (prisma: PrismaClient) => {
 			if (!validationResult.success) {
 				const formattedErrors = formatZodErrors(validationResult.error.format());
 				juetengBetLogger.error(`Validation failed: ${JSON.stringify(formattedErrors)}`);
-				const errorResponse = buildErrorResponse("Validation failed", 400, formattedErrors);
-				res.status(400).json(errorResponse);
+				res.status(400).json(buildErrorResponse("Validation failed", 400, formattedErrors));
 				return;
 			}
 
 			if (Object.keys(req.body).length === 0) {
 				juetengBetLogger.error(config.ERROR.COMMON.NO_UPDATE_FIELDS);
-				const errorResponse = buildErrorResponse(config.ERROR.COMMON.NO_UPDATE_FIELDS, 400);
-				res.status(400).json(errorResponse);
+				res.status(400).json(
+					buildErrorResponse(config.ERROR.COMMON.NO_UPDATE_FIELDS, 400),
+				);
 				return;
 			}
 
-			const validatedData = validationResult.data;
-
-			juetengBetLogger.info(`Updating juetengBet: ${id}`);
-
-			const existingJuetengBet = await prisma.juetengBet.findFirst({
-				where: { id },
-			});
+			const existingJuetengBet = await prisma.juetengBet.findFirst({ where: { id } });
 
 			if (!existingJuetengBet) {
 				juetengBetLogger.error(`${config.ERROR.JUETENGBET.NOT_FOUND}: ${id}`);
-				const errorResponse = buildErrorResponse(config.ERROR.JUETENGBET.NOT_FOUND, 404);
-				res.status(404).json(errorResponse);
+				res.status(404).json(buildErrorResponse(config.ERROR.JUETENGBET.NOT_FOUND, 404));
 				return;
 			}
 
-			const prismaData = { ...validatedData };
-
 			const updatedJuetengBet = await prisma.juetengBet.update({
 				where: { id },
-				data: prismaData,
+				data: validationResult.data,
 			});
 
 			try {
@@ -328,19 +392,18 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			juetengBetLogger.info(`${config.SUCCESS.JUETENGBET.UPDATED}: ${updatedJuetengBet.id}`);
-			const successResponse = buildSuccessResponse(
-				config.SUCCESS.JUETENGBET.UPDATED,
-				{ juetengBet: updatedJuetengBet },
-				200,
+			res.status(200).json(
+				buildSuccessResponse(
+					config.SUCCESS.JUETENGBET.UPDATED,
+					{ juetengBet: updatedJuetengBet },
+					200,
+				),
 			);
-			res.status(200).json(successResponse);
 		} catch (error) {
 			juetengBetLogger.error(`${config.ERROR.JUETENGBET.ERROR_UPDATING}: ${error}`);
-			const errorResponse = buildErrorResponse(
-				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,
-				500,
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
 			);
-			res.status(500).json(errorResponse);
 		}
 	};
 
@@ -350,27 +413,21 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			if (!id) {
 				juetengBetLogger.error(config.ERROR.QUERY_PARAMS.MISSING_ID);
-				const errorResponse = buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400);
-				res.status(400).json(errorResponse);
+				res.status(400).json(
+					buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400),
+				);
 				return;
 			}
 
-			juetengBetLogger.info(`${config.SUCCESS.JUETENGBET.DELETED}: ${id}`);
-
-			const existingJuetengBet = await prisma.juetengBet.findFirst({
-				where: { id },
-			});
+			const existingJuetengBet = await prisma.juetengBet.findFirst({ where: { id } });
 
 			if (!existingJuetengBet) {
 				juetengBetLogger.error(`${config.ERROR.JUETENGBET.NOT_FOUND}: ${id}`);
-				const errorResponse = buildErrorResponse(config.ERROR.JUETENGBET.NOT_FOUND, 404);
-				res.status(404).json(errorResponse);
+				res.status(404).json(buildErrorResponse(config.ERROR.JUETENGBET.NOT_FOUND, 404));
 				return;
 			}
 
-			await prisma.juetengBet.delete({
-				where: { id },
-			});
+			await prisma.juetengBet.delete({ where: { id } });
 
 			try {
 				await invalidateCache.byPattern(`cache:juetengBet:byId:${id}:*`);
@@ -384,19 +441,14 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			juetengBetLogger.info(`${config.SUCCESS.JUETENGBET.DELETED}: ${id}`);
-			const successResponse = buildSuccessResponse(
-				config.SUCCESS.JUETENGBET.DELETED,
-				{},
-				200,
+			res.status(200).json(
+				buildSuccessResponse(config.SUCCESS.JUETENGBET.DELETED, {}, 200),
 			);
-			res.status(200).json(successResponse);
 		} catch (error) {
 			juetengBetLogger.error(`${config.ERROR.JUETENGBET.DELETE_FAILED}: ${error}`);
-			const errorResponse = buildErrorResponse(
-				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,
-				500,
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
 			);
-			res.status(500).json(errorResponse);
 		}
 	};
 
