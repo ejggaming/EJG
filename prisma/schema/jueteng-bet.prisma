@@ -10,7 +10,7 @@ model JuetengBet {
   id             String           @id @default(auto()) @map("_id") @db.ObjectId
   drawId         String           @db.ObjectId
   bettorId       String           @db.ObjectId // User (player)
-  cobradorId     String           @db.ObjectId // Agent (COBRADOR) who collected
+  cobradorId     String?          @db.ObjectId // Agent (COBRADOR) who collected — null for self-service
   caboId         String?          @db.ObjectId // Agent (CABO) supervising cobrador
   number1        Int              // first chosen number (1–maxNumber)
   number2        Int              // second chosen number (1–maxNumber)
@@ -28,7 +28,7 @@ model JuetengBet {
 
   draw     JuetengDraw    @relation(fields: [drawId], references: [id])
   bettor   User           @relation("BettorBets", fields: [bettorId], references: [id])
-  cobrador Agent          @relation("CobradorBets", fields: [cobradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cobrador Agent?         @relation("CobradorBets", fields: [cobradorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   cabo     Agent?         @relation("CaboBets", fields: [caboId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   payout   JuetengPayout?
 

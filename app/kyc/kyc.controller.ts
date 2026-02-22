@@ -18,6 +18,9 @@ import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
+import { uploadBuffer } from "../../utils/cloudinary";
+import { notifyAdmins } from "../../utils/notifyAdmins";
+import { notifyUser } from "../../utils/notifyUser";
 
 const logger = getLogger();
 const kycLogger = logger.child({ module: "kyc" });
@@ -46,6 +49,28 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 
+		// ── Upload files to Cloudinary if present ──────────────────────────
+		try {
+			const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+			if (files?.documentFile?.[0]) {
+				kycLogger.info("Uploading document file to Cloudinary...");
+				const url = await uploadBuffer(files.documentFile[0].buffer, "kyc/documents");
+				requestData.documentUrl = url;
+				kycLogger.info(`Document uploaded: ${url}`);
+			}
+			if (files?.selfieFile?.[0]) {
+				kycLogger.info("Uploading selfie file to Cloudinary...");
+				const url = await uploadBuffer(files.selfieFile[0].buffer, "kyc/selfies");
+				requestData.selfieUrl = url;
+				kycLogger.info(`Selfie uploaded: ${url}`);
+			}
+		} catch (uploadError) {
+			kycLogger.error(`Cloudinary upload failed: ${uploadError}`);
+			const errorResponse = buildErrorResponse("File upload failed", 500);
+			res.status(500).json(errorResponse);
+			return;
+		}
+
 		const validation = CreateKycSchema.safeParse(requestData);
 		if (!validation.success) {
 			const formattedErrors = formatZodErrors(validation.error.format());
@@ -55,8 +80,19 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		if (!validation.data.documentUrl) {
+			const errorResponse = buildErrorResponse("Document file is required", 400);
+			res.status(400).json(errorResponse);
+			return;
+		}
+
 		try {
-			const kyc = await prisma.kYC.create({ data: validation.data });
+			const kyc = await prisma.kYC.create({
+				data: {
+					...validation.data,
+					documentUrl: validation.data.documentUrl,
+				},
+			});
 			kycLogger.info(`Kyc created successfully: ${kyc.id}`);
 
 			logActivity(req, {
@@ -92,6 +128,19 @@ export const controller = (prisma: PrismaClient) => {
 			} catch (cacheError) {
 				kycLogger.warn("Failed to invalidate cache after kyc creation:", cacheError);
 			}
+
+			// Notify all admin users about new KYC submission
+			await notifyAdmins(prisma, (req as any).io, {
+				type: "KYC_UPDATE",
+				title: "New KYC Submission",
+				body: `A user submitted KYC verification (${kyc.documentType}).`,
+				metadata: {
+					kycId: kyc.id,
+					userId: kyc.userId,
+					documentType: kyc.documentType,
+					status: kyc.status,
+				},
+			});
 
 			const successResponse = buildSuccessResponse(config.SUCCESS.KYC.CREATED, kyc, 201);
 			res.status(201).json(successResponse);
@@ -303,6 +352,39 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			kycLogger.info(`${config.SUCCESS.KYC.UPDATED}: ${updatedKyc.id}`);
+
+			// Notify user when their KYC status changes
+			const newStatus = validatedData.status;
+			if (newStatus && existingKyc.status !== newStatus) {
+				const statusMessages: Record<string, { title: string; body: string }> = {
+					APPROVED: {
+						title: "KYC Approved",
+						body: "Congratulations! Your identity verification has been approved. You now have full access to all features.",
+					},
+					REJECTED: {
+						title: "KYC Rejected",
+						body: "Unfortunately, your identity verification was rejected. Please resubmit valid documents.",
+					},
+					REQUIRES_MORE_INFO: {
+						title: "KYC: More Information Needed",
+						body: "We need additional documents for your identity verification. Please check and resubmit.",
+					},
+				};
+
+				const msg = statusMessages[newStatus];
+				if (msg) {
+					notifyUser(prisma, (req as any).io, updatedKyc.userId, {
+						type: "KYC_UPDATE",
+						title: msg.title,
+						body: msg.body,
+						metadata: {
+							kycId: updatedKyc.id,
+							status: newStatus,
+						},
+					});
+				}
+			}
+
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.KYC.UPDATED,
 				{ kyc: updatedKyc },

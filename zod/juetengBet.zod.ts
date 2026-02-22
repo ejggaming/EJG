@@ -3,8 +3,8 @@ import { z } from "zod";
 // Input schema for placing a bet — server computes combinationKey, reference, status, isWinner
 export const CreateJuetengBetSchema = z.object({
 	drawId: z.string().min(1),
-	bettorId: z.string().min(1),
-	cobradorId: z.string().min(1),
+	bettorId: z.string().min(1).optional(), // defaults to req.userId for self-service
+	cobradorId: z.string().min(1).optional(), // optional for direct player bets
 	caboId: z.string().optional(),
 	number1: z.number().int().min(1),
 	number2: z.number().int().min(1),

@@ -24,6 +24,7 @@ interface IAuthController {
 	me(req: Request, res: Response, next: NextFunction): Promise<void>;
 	requestOtp(req: Request, res: Response, next: NextFunction): Promise<void>;
 	verifyOtp(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getAllUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IAuthController): Router => {
@@ -251,6 +252,44 @@ export const router = (route: Router, controller: IAuthController): Router => {
 	 *         description: Maximum attempts exceeded
 	 */
 	routes.post(`${path}/otp/verify`, authRateLimiter, controller.verifyOtp);
+
+	/**
+	 * @openapi
+	 * /api/auth/users:
+	 *   get:
+	 *     summary: Get all users (Admin only)
+	 *     description: List all platform users with filtering and pagination. Requires ADMIN or SUPER_ADMIN role.
+	 *     tags: [Auth]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: query
+	 *         name: page
+	 *         schema:
+	 *           type: integer
+	 *       - in: query
+	 *         name: limit
+	 *         schema:
+	 *           type: integer
+	 *       - in: query
+	 *         name: search
+	 *         schema:
+	 *           type: string
+	 *       - in: query
+	 *         name: status
+	 *         schema:
+	 *           type: string
+	 *       - in: query
+	 *         name: role
+	 *         schema:
+	 *           type: string
+	 *     responses:
+	 *       200:
+	 *         description: Users retrieved
+	 *       403:
+	 *         description: Forbidden
+	 */
+	routes.get(`${path}/users`, verifyToken, controller.getAllUsers);
 
 	route.use(routes);
 	return route;

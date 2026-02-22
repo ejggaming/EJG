@@ -62,6 +62,12 @@ export const uploadCSV = multer({
 		files: 1, // Maximum 1 CSV file
 	},
 }).single("file");
+// KYC document + selfie upload
+export const uploadKycFiles = upload.fields([
+	{ name: "documentFile", maxCount: 1 },
+	{ name: "selfieFile", maxCount: 1 },
+]);
+
 // Flexible upload for submissions - accepts any field name
 export const uploadSubmissionFiles = upload.any();
 

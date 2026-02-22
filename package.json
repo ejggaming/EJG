@@ -20,6 +20,8 @@
     "apply-indexes": "ts-node scripts/apply-indexes.ts",
     "copy-codebase": "ts-node scripts/copy-codebase.ts",
     "generate": "ts-node scripts/generate-and-export.ts",
+    "reset-draw-result": "ts-node scripts/reset-draw-result.ts",
+    "reset-all-draws": "ts-node scripts/reset-all-draws.ts",
     "api-list": "curl -X GET 'http://localhost:3000/api/docs/api-list?format=json' | jq",
     "zod-generate": "node scripts/zod-generate.js",
     "orchestrate": "ts-node .orchestration/agents/.orchestrator/agent-task-manager.ts"

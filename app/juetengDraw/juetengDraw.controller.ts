@@ -22,6 +22,7 @@ import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
+import { notifyUser } from "../../utils/notifyUser";
 
 const logger = getLogger();
 const juetengDrawLogger = logger.child({ module: "juetengDraw" });
@@ -32,6 +33,118 @@ const toSingleString = (v: unknown): string | undefined => {
 	if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return v[0];
 	return undefined;
 };
+
+/**
+ * Settle all PENDING bets for a draw that has just been encoded.
+ * - Matching combinationKey → WON (payout = amount × payoutMultiplier)
+ * - Non-matching → LOST
+ * - Winners get wallet credit + notification
+ * - Draw stats (totalPayout, grossProfit) are updated
+ */
+async function settleBetsForDraw(
+	prisma: PrismaClient,
+	io: any,
+	draw: { id: string; combinationKey: string | null; number1: number | null; number2: number | null },
+) {
+	if (!draw.combinationKey) return;
+
+	const gameConfig = await prisma.juetengConfig.findFirst({ where: { isActive: true } });
+	const multiplier = gameConfig?.payoutMultiplier ?? 700;
+
+	// Get all pending bets for this draw
+	const pendingBets = await prisma.juetengBet.findMany({
+		where: { drawId: draw.id, status: "PENDING" },
+	});
+
+	if (pendingBets.length === 0) return;
+
+	juetengDrawLogger.info(
+		`Settling ${pendingBets.length} bets for draw ${draw.id} (winning: ${draw.combinationKey})`,
+	);
+
+	let totalPayout = 0;
+
+	for (const bet of pendingBets) {
+		const isWinner = bet.combinationKey === draw.combinationKey;
+
+		if (isWinner) {
+			const payoutAmount = bet.amount * multiplier;
+			totalPayout += payoutAmount;
+
+			// Credit winner's wallet atomically
+			const wallet = await prisma.wallet.findUnique({ where: { userId: bet.bettorId } });
+			if (wallet) {
+				const newBalance = wallet.balance + payoutAmount;
+				const txRef = `PAYOUT-${bet.reference}`;
+
+				await prisma.$transaction([
+					prisma.juetengBet.update({
+						where: { id: bet.id },
+						data: {
+							status: "WON",
+							isWinner: true,
+							payoutAmount,
+							settledAt: new Date(),
+						},
+					}),
+					prisma.wallet.update({
+						where: { id: wallet.id },
+						data: { balance: newBalance },
+					}),
+					prisma.transaction.create({
+						data: {
+							userId: bet.bettorId,
+							walletId: wallet.id,
+							type: "JUETENG_PAYOUT",
+							amount: payoutAmount,
+							balanceBefore: wallet.balance,
+							balanceAfter: newBalance,
+							currency: wallet.currency,
+							status: "COMPLETED",
+							reference: txRef,
+							description: `Payout for winning bet ${bet.reference} (${bet.combinationKey})`,
+						},
+					}),
+				]);
+
+				// Notify the winner
+				notifyUser(prisma, io, bet.bettorId, {
+					type: "PAYOUT",
+					title: "🎉 You Won!",
+					body: `Your bet ${bet.combinationKey} matched! You won ₱${payoutAmount.toLocaleString()}. The payout has been credited to your wallet.`,
+					metadata: {
+						betId: bet.id,
+						reference: bet.reference,
+						combinationKey: bet.combinationKey,
+						payoutAmount,
+					},
+				});
+			}
+		} else {
+			// Mark as LOST
+			await prisma.juetengBet.update({
+				where: { id: bet.id },
+				data: { status: "LOST", isWinner: false, settledAt: new Date() },
+			});
+		}
+	}
+
+	// Update draw stats
+	await prisma.juetengDraw.update({
+		where: { id: draw.id },
+		data: {
+			totalPayout,
+			grossProfit: { increment: -totalPayout },
+			status: "SETTLED",
+			settledAt: new Date(),
+		},
+	});
+
+	const winners = pendingBets.filter((b) => b.combinationKey === draw.combinationKey).length;
+	juetengDrawLogger.info(
+		`Draw ${draw.id} settled: ${winners} winners, ₱${totalPayout.toLocaleString()} payout`,
+	);
+}
 
 export const controller = (prisma: PrismaClient) => {
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
@@ -322,6 +435,21 @@ export const controller = (prisma: PrismaClient) => {
 				data: prismaData,
 			});
 
+			// ── Settle bets when draw result is encoded ──────────────────────────
+			// If status changed to DRAWN and winning numbers are set, settle all PENDING bets
+			if (
+				updatedJuetengDraw.status === "DRAWN" &&
+				updatedJuetengDraw.number1 != null &&
+				updatedJuetengDraw.number2 != null
+			) {
+				try {
+					await settleBetsForDraw(prisma, (req as any).io, updatedJuetengDraw);
+				} catch (settleErr) {
+					juetengDrawLogger.error(`Bet settlement failed for draw ${id}: ${settleErr}`);
+					// Don't fail the draw update — settlement can be retried
+				}
+			}
+
 			try {
 				await invalidateCache.byPattern(`cache:juetengDraw:byId:${id}:*`);
 				await invalidateCache.byPattern("cache:juetengDraw:list:*");
@@ -594,7 +722,10 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			if (!draw.combinationKey) {
 				res.status(422).json(
-					buildErrorResponse("Draw is missing combinationKey. Record the result first.", 422),
+					buildErrorResponse(
+						"Draw is missing combinationKey. Record the result first.",
+						422,
+					),
 				);
 				return;
 			}
@@ -651,7 +782,9 @@ export const controller = (prisma: PrismaClient) => {
 
 			// ── Cobrador commissions: cobradorRate % of their collected stake ──
 			const stakeByCobradorId = allBets.reduce<Record<string, number>>((acc, bet) => {
-				acc[bet.cobradorId] = (acc[bet.cobradorId] ?? 0) + bet.amount;
+				if (bet.cobradorId) {
+					acc[bet.cobradorId] = (acc[bet.cobradorId] ?? 0) + bet.amount;
+				}
 				return acc;
 			}, {});
 			for (const [cobradorId, baseAmount] of Object.entries(stakeByCobradorId)) {
@@ -730,14 +863,18 @@ export const controller = (prisma: PrismaClient) => {
 			);
 
 			res.status(200).json(
-				buildSuccessResponse("Draw settled successfully.", {
-					draw: settledDraw,
-					winnerCount: winningBets.length,
-					totalBets: allBets.length,
-					totalStake,
-					totalPayout,
-					grossProfit,
-				}, 200),
+				buildSuccessResponse(
+					"Draw settled successfully.",
+					{
+						draw: settledDraw,
+						winnerCount: winningBets.length,
+						totalBets: allBets.length,
+						totalStake,
+						totalPayout,
+						grossProfit,
+					},
+					200,
+				),
 			);
 		} catch (error) {
 			juetengDrawLogger.error(`Error settling draw ${id}: ${error}`);
