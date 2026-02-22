@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { cache, cacheShort, cacheMedium, cacheUser } from "../../middleware/cache";
+import { uploadKycFiles } from "../../middleware/upload";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -308,7 +309,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
-	routes.post("/", controller.create);
+	routes.post("/", uploadKycFiles, controller.create);
 
 	/**
 	 * @openapi

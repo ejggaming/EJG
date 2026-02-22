@@ -860,5 +860,108 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { register, login, logout, refresh, changePassword, me, requestOtp, verifyOtp };
+	// ── GET ALL USERS (Admin) ──
+	const getAllUsers = async (req: Request, res: Response, _next: NextFunction) => {
+		const role = (req as any).role;
+		if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
+			res.status(403).json(buildErrorResponse("Forbidden", 403));
+			return;
+		}
+
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 50;
+		const skip = (page - 1) * limit;
+		const search = (req.query.search as string) || "";
+		const statusFilter = req.query.status as string | undefined;
+		const roleFilter = req.query.role as string | undefined;
+
+		try {
+			const where: any = { isDeleted: false };
+
+			if (search) {
+				where.OR = [
+					{ email: { contains: search, mode: "insensitive" } },
+					{ userName: { contains: search, mode: "insensitive" } },
+					{ phoneNumber: { contains: search } },
+				];
+			}
+			if (statusFilter) where.status = statusFilter;
+			if (roleFilter) where.role = roleFilter;
+
+			const [users, total] = await Promise.all([
+				prisma.user.findMany({
+					where,
+					skip,
+					take: limit,
+					orderBy: { createdAt: "desc" },
+					include: {
+						person: true,
+						wallet: true,
+						kyc: true,
+					},
+				}),
+				prisma.user.count({ where }),
+			]);
+
+			const mapped = users.map((u) => ({
+				id: u.id,
+				email: u.email,
+				userName: u.userName,
+				phoneNumber: u.phoneNumber,
+				role: u.role,
+				status: u.status,
+				avatar: u.avatar,
+				isEmailVerified: u.isEmailVerified,
+				isPhoneVerified: u.isPhoneVerified,
+				lastLogin: u.lastLogin,
+				createdAt: u.createdAt,
+				person: u.person?.personalInfo
+					? {
+							firstName: u.person.personalInfo.firstName ?? "",
+							lastName: u.person.personalInfo.lastName ?? "",
+							middleName: u.person.personalInfo.middleName ?? "",
+						}
+					: null,
+				wallet: u.wallet
+					? {
+							id: u.wallet.id,
+							balance: u.wallet.balance,
+							status: u.wallet.status,
+						}
+					: null,
+				kyc: u.kyc
+					? {
+							id: u.kyc.id,
+							status: u.kyc.status,
+							submittedAt: u.kyc.submittedAt,
+						}
+					: null,
+			}));
+
+			const totalPages = Math.ceil(total / limit);
+
+			res.status(200).json(
+				buildSuccessResponse("Users retrieved", {
+					users: mapped,
+					count: total,
+					pagination: { page, limit, totalPages, total },
+				}),
+			);
+		} catch (error) {
+			authLogger.error(`getAllUsers error: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
+	return {
+		register,
+		login,
+		logout,
+		refresh,
+		changePassword,
+		me,
+		requestOtp,
+		verifyOtp,
+		getAllUsers,
+	};
 };

@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
@@ -23,6 +24,45 @@ const io = new Server(server, {
 		origin: config.cors.origins,
 		credentials: config.cors.credentials,
 	},
+});
+
+// Socket.IO authentication & room management
+io.on("connection", (socket) => {
+	const token =
+		socket.handshake.auth?.token ||
+		// parse the cookie header manually since socket.io doesn't use cookieParser
+		socket.handshake.headers.cookie
+			?.split("; ")
+			.find((c) => c.startsWith("token="))
+			?.split("=")[1];
+
+	if (!token) {
+		socket.disconnect();
+		return;
+	}
+
+	try {
+		const decoded = jwt.verify(token, config.jwt.secret) as {
+			userId: string;
+			role: string;
+		};
+
+		// Join user-specific room so we can target them individually
+		socket.join(decoded.userId);
+
+		// Admin/Super Admin users join the "admin" room for broadcast notifications
+		if (decoded.role === "ADMIN" || decoded.role === "SUPER_ADMIN") {
+			socket.join("admin");
+		}
+
+		console.log(`🔌 Socket connected: ${decoded.userId} (${decoded.role})`);
+
+		socket.on("disconnect", () => {
+			console.log(`🔌 Socket disconnected: ${decoded.userId}`);
+		});
+	} catch {
+		socket.disconnect();
+	}
 });
 
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -55,17 +95,18 @@ const auth = require("./app/auth")(prisma);
 const notification = require("./app/notification")(prisma);
 const docs = require("./app/docs/docs");
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-// Configure CORS
+// CORS must be registered before security middleware so that rate-limit
+// 429 responses still include the Access-Control-Allow-Origin header.
 app.use(
 	cors({
 		origin: config.cors.origins,
 		credentials: config.cors.credentials,
 	}),
 );
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Health check endpoint
 app.get("/", (req: Request, res: Response) => {
@@ -138,6 +179,13 @@ app.use(config.baseApiPath, auth);
 app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) => {
 	if (req.path.startsWith("/docs") || req.path.startsWith("/auth")) {
 		// Skip middleware for the docs and auth routes
+		return next();
+	}
+	// Allow unauthenticated GET for public game data
+	if (
+		req.method === "GET" &&
+		(req.path.startsWith("/juetengConfig") || req.path.startsWith("/juetengDraw"))
+	) {
 		return next();
 	}
 	verifyToken(req, res, () => {

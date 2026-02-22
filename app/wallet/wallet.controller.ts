@@ -12,12 +12,19 @@ import {
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler";
 import { groupDataByField } from "../../helper/dataGrouping";
 import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler";
-import { CreateWalletSchema, UpdateWalletSchema } from "../../zod/wallet.zod";
+import {
+	CreateWalletSchema,
+	UpdateWalletSchema,
+	DepositRequestSchema,
+	WithdrawRequestSchema,
+} from "../../zod/wallet.zod";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
+import { notifyAdmins } from "../../utils/notifyAdmins";
+import { notifyUser } from "../../utils/notifyUser";
 
 const logger = getLogger();
 const walletLogger = logger.child({ module: "wallet" });
@@ -60,7 +67,7 @@ export const controller = (prisma: PrismaClient) => {
 			walletLogger.info(`Wallet created successfully: ${wallet.id}`);
 
 			logActivity(req, {
-				userId: (req as any).user?.id || "unknown",
+				userId: (req as any).userId || "unknown",
 				action: config.ACTIVITY_LOG.WALLET.ACTIONS.CREATE_WALLET,
 				description: `${config.ACTIVITY_LOG.WALLET.DESCRIPTIONS.WALLET_CREATED}: ${wallet.id}`,
 				page: {
@@ -70,7 +77,7 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			logAudit(req, {
-				userId: (req as any).user?.id || "unknown",
+				userId: (req as any).userId || "unknown",
 				action: config.AUDIT_LOG.ACTIONS.CREATE,
 				resource: config.AUDIT_LOG.RESOURCES.WALLET,
 				severity: config.AUDIT_LOG.SEVERITY.LOW,
@@ -380,5 +387,492 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { create, getAll, getById, update, remove };
+	// ─── GET /wallet/me — Get current user's wallet ──────────────────────────
+	const getMyWallet = async (req: Request, res: Response, _next: NextFunction) => {
+		const userId: string | undefined = (req as any).userId;
+		if (!userId) {
+			res.status(401).json(buildErrorResponse("Unauthorized", 401));
+			return;
+		}
+
+		try {
+			const wallet = await prisma.wallet.findUnique({
+				where: { userId },
+				include: {
+					transactions: {
+						orderBy: { createdAt: "desc" },
+						take: 20,
+					},
+				},
+			});
+
+			if (!wallet) {
+				res.status(404).json(buildErrorResponse("Wallet not found", 404));
+				return;
+			}
+
+			// Compute summary stats from transactions
+			const allTx = await prisma.transaction.findMany({ where: { userId } });
+			const totalDeposits = allTx
+				.filter((t) => t.type === "DEPOSIT" && t.status === "COMPLETED")
+				.reduce((sum, t) => sum + t.amount, 0);
+			const totalWithdrawals = allTx
+				.filter((t) => t.type === "WITHDRAWAL" && t.status === "COMPLETED")
+				.reduce((sum, t) => sum + t.amount, 0);
+			const totalWinnings = allTx
+				.filter((t) => t.type === "JUETENG_PAYOUT" && t.status === "COMPLETED")
+				.reduce((sum, t) => sum + t.amount, 0);
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Wallet retrieved",
+					{
+						wallet,
+						stats: { totalDeposits, totalWithdrawals, totalWinnings },
+					},
+					200,
+				),
+			);
+		} catch (error) {
+			walletLogger.error(`Error getting user wallet: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
+	// ─── GET /wallet/transactions — Get current user's transactions ──────────
+	const getMyTransactions = async (req: Request, res: Response, _next: NextFunction) => {
+		const userId: string | undefined = (req as any).userId;
+		if (!userId) {
+			res.status(401).json(buildErrorResponse("Unauthorized", 401));
+			return;
+		}
+
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 20;
+		const type = req.query.type as string | undefined;
+		const skip = (page - 1) * limit;
+
+		try {
+			const where: Prisma.TransactionWhereInput = { userId };
+			if (type) {
+				where.type = type as any;
+			}
+
+			const [transactions, total] = await Promise.all([
+				prisma.transaction.findMany({
+					where,
+					orderBy: { createdAt: "desc" },
+					skip,
+					take: limit,
+				}),
+				prisma.transaction.count({ where }),
+			]);
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Transactions retrieved",
+					{
+						transactions,
+						count: total,
+						pagination: buildPagination(total, page, limit),
+					},
+					200,
+				),
+			);
+		} catch (error) {
+			walletLogger.error(`Error getting transactions: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
+	// ─── POST /wallet/deposit — Request a deposit ────────────────────────────
+	const requestDeposit = async (req: Request, res: Response, _next: NextFunction) => {
+		const userId: string | undefined = (req as any).userId;
+		if (!userId) {
+			res.status(401).json(buildErrorResponse("Unauthorized", 401));
+			return;
+		}
+
+		const validation = DepositRequestSchema.safeParse(req.body);
+		if (!validation.success) {
+			const formattedErrors = formatZodErrors(validation.error.format());
+			res.status(400).json(buildErrorResponse("Validation failed", 400, formattedErrors));
+			return;
+		}
+
+		try {
+			const wallet = await prisma.wallet.findUnique({ where: { userId } });
+			if (!wallet) {
+				res.status(404).json(buildErrorResponse("Wallet not found. Contact support.", 404));
+				return;
+			}
+			if (wallet.status !== "ACTIVE") {
+				res.status(403).json(buildErrorResponse("Wallet is not active", 403));
+				return;
+			}
+
+			const reference = `DEP-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+			const transaction = await prisma.transaction.create({
+				data: {
+					userId,
+					walletId: wallet.id,
+					type: "DEPOSIT",
+					amount: validation.data.amount,
+					balanceBefore: wallet.balance,
+					balanceAfter: wallet.balance, // unchanged until approved
+					currency: wallet.currency,
+					status: "PENDING",
+					reference: validation.data.referenceNumber || reference,
+					description: `Deposit via ${validation.data.paymentMethod}`,
+					metadata: {
+						paymentMethod: validation.data.paymentMethod,
+					},
+				},
+			});
+
+			walletLogger.info(`Deposit request created: ${transaction.id} for user ${userId}`);
+
+			// Notify all admin users about new deposit request
+			await notifyAdmins(prisma, (req as any).io, {
+				type: "TRANSACTION",
+				title: "New Deposit Request",
+				body: `Deposit request of ₱${transaction.amount.toLocaleString()} via ${validation.data.paymentMethod}.`,
+				metadata: {
+					transactionId: transaction.id,
+					userId,
+					amount: transaction.amount,
+					paymentMethod: validation.data.paymentMethod,
+					type: "DEPOSIT",
+				},
+			});
+
+			logActivity(req, {
+				userId,
+				action: "DEPOSIT_REQUEST",
+				description: `Deposit request of ${validation.data.amount} ${wallet.currency} via ${validation.data.paymentMethod}`,
+				page: { url: req.originalUrl, title: "Wallet Deposit" },
+			});
+
+			res.status(201).json(
+				buildSuccessResponse("Deposit request submitted", { transaction }, 201),
+			);
+		} catch (error) {
+			walletLogger.error(`Deposit request failed: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
+	// ─── POST /wallet/withdraw — Request a withdrawal ────────────────────────
+	const requestWithdraw = async (req: Request, res: Response, _next: NextFunction) => {
+		const userId: string | undefined = (req as any).userId;
+		if (!userId) {
+			res.status(401).json(buildErrorResponse("Unauthorized", 401));
+			return;
+		}
+
+		const validation = WithdrawRequestSchema.safeParse(req.body);
+		if (!validation.success) {
+			const formattedErrors = formatZodErrors(validation.error.format());
+			res.status(400).json(buildErrorResponse("Validation failed", 400, formattedErrors));
+			return;
+		}
+
+		try {
+			const wallet = await prisma.wallet.findUnique({ where: { userId } });
+			if (!wallet) {
+				res.status(404).json(buildErrorResponse("Wallet not found", 404));
+				return;
+			}
+			if (wallet.status !== "ACTIVE") {
+				res.status(403).json(buildErrorResponse("Wallet is not active", 403));
+				return;
+			}
+			if (wallet.balance < validation.data.amount) {
+				res.status(400).json(buildErrorResponse("Insufficient balance", 400));
+				return;
+			}
+
+			const reference = `WDR-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+			const transaction = await prisma.transaction.create({
+				data: {
+					userId,
+					walletId: wallet.id,
+					type: "WITHDRAWAL",
+					amount: validation.data.amount,
+					balanceBefore: wallet.balance,
+					balanceAfter: wallet.balance, // unchanged until approved
+					currency: wallet.currency,
+					status: "PENDING",
+					reference,
+					description: `Withdrawal to ${validation.data.paymentMethod} (${validation.data.accountNumber})`,
+					metadata: {
+						paymentMethod: validation.data.paymentMethod,
+						accountNumber: validation.data.accountNumber,
+						accountName: validation.data.accountName,
+					},
+				},
+			});
+
+			walletLogger.info(`Withdrawal request created: ${transaction.id} for user ${userId}`);
+
+			// Notify all admin users about new withdrawal request
+			await notifyAdmins(prisma, (req as any).io, {
+				type: "TRANSACTION",
+				title: "New Withdrawal Request",
+				body: `Withdrawal request of ₱${transaction.amount.toLocaleString()} to ${validation.data.paymentMethod}.`,
+				metadata: {
+					transactionId: transaction.id,
+					userId,
+					amount: transaction.amount,
+					paymentMethod: validation.data.paymentMethod,
+					type: "WITHDRAWAL",
+				},
+			});
+
+			logActivity(req, {
+				userId,
+				action: "WITHDRAWAL_REQUEST",
+				description: `Withdrawal request of ${validation.data.amount} ${wallet.currency} to ${validation.data.paymentMethod}`,
+				page: { url: req.originalUrl, title: "Wallet Withdrawal" },
+			});
+
+			res.status(201).json(
+				buildSuccessResponse("Withdrawal request submitted", { transaction }, 201),
+			);
+		} catch (error) {
+			walletLogger.error(`Withdrawal request failed: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
+	// ─── PATCH /wallet/transaction/:id/approve — Admin approves ──────────────
+	const approveTransaction = async (req: Request, res: Response, _next: NextFunction) => {
+		const txId = toSingleString(req.params.id) || "";
+		const adminId: string = (req as any).user?.id || "unknown";
+
+		try {
+			const transaction = await prisma.transaction.findUnique({ where: { id: txId } });
+			if (!transaction) {
+				res.status(404).json(buildErrorResponse("Transaction not found", 404));
+				return;
+			}
+			if (transaction.status !== "PENDING") {
+				res.status(400).json(buildErrorResponse("Transaction is not pending", 400));
+				return;
+			}
+
+			const wallet = await prisma.wallet.findUnique({ where: { id: transaction.walletId } });
+			if (!wallet) {
+				res.status(404).json(buildErrorResponse("Wallet not found", 404));
+				return;
+			}
+
+			let newBalance = wallet.balance;
+			if (transaction.type === "DEPOSIT") {
+				newBalance = wallet.balance + transaction.amount;
+			} else if (transaction.type === "WITHDRAWAL") {
+				if (wallet.balance < transaction.amount) {
+					res.status(400).json(
+						buildErrorResponse("Insufficient balance for withdrawal", 400),
+					);
+					return;
+				}
+				newBalance = wallet.balance - transaction.amount;
+			}
+
+			// Atomic update: wallet balance + transaction status
+			const [updatedWallet, updatedTx] = await prisma.$transaction([
+				prisma.wallet.update({
+					where: { id: wallet.id },
+					data: { balance: newBalance },
+				}),
+				prisma.transaction.update({
+					where: { id: txId },
+					data: {
+						status: "COMPLETED",
+						balanceAfter: newBalance,
+					},
+				}),
+			]);
+
+			try {
+				await invalidateCache.byPattern(`cache:wallet:byId:${wallet.id}:*`);
+				await invalidateCache.byPattern("cache:wallet:list:*");
+			} catch (_) {}
+
+			walletLogger.info(
+				`Transaction ${txId} approved by admin ${adminId}. New balance: ${newBalance}`,
+			);
+
+			logAudit(req, {
+				userId: adminId,
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.WALLET,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM as
+					| "LOW"
+					| "MEDIUM"
+					| "HIGH"
+					| "CRITICAL",
+				entityType: "TRANSACTION",
+				entityId: txId,
+				changesBefore: { status: "PENDING", balance: wallet.balance },
+				changesAfter: { status: "COMPLETED", balance: newBalance },
+				description: `Approved ${transaction.type} of ${transaction.amount} ${wallet.currency}`,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Transaction approved",
+					{ transaction: updatedTx, wallet: updatedWallet },
+					200,
+				),
+			);
+
+			// Notify the user about the approved transaction (fire-and-forget)
+			notifyUser(prisma, (req as any).io, transaction.userId, {
+				type: "TRANSACTION",
+				title: `${transaction.type === "DEPOSIT" ? "Deposit" : "Withdrawal"} Approved`,
+				body: `Your ${transaction.type.toLowerCase()} of \u20b1${transaction.amount.toLocaleString()} has been approved. New balance: \u20b1${newBalance.toLocaleString()}.`,
+				metadata: {
+					transactionId: txId,
+					type: transaction.type,
+					amount: transaction.amount,
+					status: "COMPLETED",
+					newBalance,
+				},
+			});
+		} catch (error) {
+			walletLogger.error(`Transaction approval failed: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
+	// ─── PATCH /wallet/transaction/:id/reject — Admin rejects ────────────────
+	const rejectTransaction = async (req: Request, res: Response, _next: NextFunction) => {
+		const txId = toSingleString(req.params.id) || "";
+		const adminId: string = (req as any).userId || "unknown";
+		const { reason } = req.body;
+
+		try {
+			const transaction = await prisma.transaction.findUnique({ where: { id: txId } });
+			if (!transaction) {
+				res.status(404).json(buildErrorResponse("Transaction not found", 404));
+				return;
+			}
+			if (transaction.status !== "PENDING") {
+				res.status(400).json(buildErrorResponse("Transaction is not pending", 400));
+				return;
+			}
+
+			const updatedTx = await prisma.transaction.update({
+				where: { id: txId },
+				data: {
+					status: "FAILED",
+					description: reason
+						? `${transaction.description} — Rejected: ${reason}`
+						: transaction.description,
+				},
+			});
+
+			walletLogger.info(`Transaction ${txId} rejected by admin ${adminId}`);
+
+			res.status(200).json(
+				buildSuccessResponse("Transaction rejected", { transaction: updatedTx }, 200),
+			);
+
+			// Notify the user about the rejected transaction (fire-and-forget)
+			notifyUser(prisma, (req as any).io, transaction.userId, {
+				type: "TRANSACTION",
+				title: `${transaction.type === "DEPOSIT" ? "Deposit" : "Withdrawal"} Rejected`,
+				body: `Your ${transaction.type.toLowerCase()} of \u20b1${transaction.amount.toLocaleString()} has been rejected.${reason ? ` Reason: ${reason}` : ""}`,
+				metadata: {
+					transactionId: txId,
+					type: transaction.type,
+					amount: transaction.amount,
+					status: "FAILED",
+					reason: reason || undefined,
+				},
+			});
+		} catch (error) {
+			walletLogger.error(`Transaction rejection failed: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
+	// ─── GET /wallet/admin/transactions — Admin: list all transactions ───────
+	const adminGetAllTransactions = async (req: Request, res: Response, _next: NextFunction) => {
+		const role = (req as any).role;
+		if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
+			res.status(403).json(buildErrorResponse("Forbidden", 403));
+			return;
+		}
+
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 50;
+		const skip = (page - 1) * limit;
+		const type = req.query.type as string | undefined;
+		const status = req.query.status as string | undefined;
+
+		try {
+			const where: Prisma.TransactionWhereInput = {};
+			if (type) where.type = type as any;
+			if (status) where.status = status as any;
+
+			const [transactions, total] = await Promise.all([
+				prisma.transaction.findMany({
+					where,
+					orderBy: { createdAt: "desc" },
+					skip,
+					take: limit,
+					include: {
+						user: {
+							include: { person: true },
+						},
+					},
+				}),
+				prisma.transaction.count({ where }),
+			]);
+
+			const mapped = transactions.map((tx) => ({
+				...tx,
+				userName:
+					tx.user?.person?.personalInfo?.firstName &&
+					tx.user?.person?.personalInfo?.lastName
+						? `${tx.user.person.personalInfo.firstName} ${tx.user.person.personalInfo.lastName}`
+						: (tx.user?.email ?? "Unknown"),
+				userEmail: tx.user?.email ?? "",
+				user: undefined,
+			}));
+
+			const totalPages = Math.ceil(total / limit);
+
+			res.status(200).json(
+				buildSuccessResponse("Transactions retrieved", {
+					transactions: mapped,
+					count: total,
+					pagination: { page, limit, totalPages, total },
+				}),
+			);
+		} catch (error) {
+			walletLogger.error(`Admin getAllTransactions error: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
+	return {
+		create,
+		getAll,
+		getById,
+		update,
+		remove,
+		getMyWallet,
+		getMyTransactions,
+		requestDeposit,
+		requestWithdraw,
+		approveTransaction,
+		rejectTransaction,
+		adminGetAllTransactions,
+	};
 };

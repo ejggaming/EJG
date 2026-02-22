@@ -59,26 +59,30 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		const { drawId, bettorId, cobradorId, caboId, number1, number2, amount, currency } =
-			validation.data;
+		const { drawId, number1, number2, amount, currency, caboId } = validation.data;
+
+		// Default bettorId to authenticated user if not provided (self-service)
+		const bettorId = validation.data.bettorId || (req as any).userId;
+		const cobradorId = validation.data.cobradorId || undefined;
+
+		if (!bettorId) {
+			res.status(400).json(buildErrorResponse("bettorId is required", 400));
+			return;
+		}
 
 		try {
 			// 1. Fetch active game config
 			const gameConfig = await prisma.juetengConfig.findFirst({ where: { isActive: true } });
 			if (!gameConfig) {
 				juetengBetLogger.error("No active JuetengConfig found");
-				res.status(503).json(
-					buildErrorResponse("Game configuration unavailable", 503),
-				);
+				res.status(503).json(buildErrorResponse("Game configuration unavailable", 503));
 				return;
 			}
 
 			// 2. Validate draw exists and is OPEN
 			const draw = await prisma.juetengDraw.findFirst({ where: { id: drawId } });
 			if (!draw) {
-				res.status(404).json(
-					buildErrorResponse(config.ERROR.JUETENGDRAW.NOT_FOUND, 404),
-				);
+				res.status(404).json(buildErrorResponse(config.ERROR.JUETENGDRAW.NOT_FOUND, 404));
 				return;
 			}
 			if (draw.status !== "OPEN") {
@@ -125,23 +129,74 @@ export const controller = (prisma: PrismaClient) => {
 			const seq = String(betCount + 1).padStart(5, "0");
 			const reference = `${dateStr}-${typeAbbr}-${seq}`;
 
-			// 7. Create the bet with server-computed fields
-			const juetengBet = await prisma.juetengBet.create({
-				data: {
-					drawId,
-					bettorId,
-					cobradorId,
-					caboId,
-					number1,
-					number2,
-					combinationKey,
-					amount,
-					currency: currency ?? "PHP",
-					status: "PENDING",
-					isWinner: false,
-					reference,
-				},
-			});
+			// 7. Check wallet balance and deduct atomically
+			const wallet = await prisma.wallet.findUnique({ where: { userId: bettorId } });
+			if (!wallet) {
+				res.status(404).json(buildErrorResponse("Wallet not found. Please set up your wallet first.", 404));
+				return;
+			}
+			if (wallet.status !== "ACTIVE") {
+				res.status(422).json(buildErrorResponse("Your wallet is not active.", 422));
+				return;
+			}
+			if (wallet.balance < amount) {
+				res.status(422).json(
+					buildErrorResponse(
+						`Insufficient balance. Your balance is ₱${wallet.balance.toLocaleString()}, but the bet requires ₱${amount.toLocaleString()}.`,
+						422,
+					),
+				);
+				return;
+			}
+
+			const newBalance = wallet.balance - amount;
+			const txReference = `BET-${reference}`;
+
+			// 8. Atomic transaction: deduct wallet + create bet + record transaction + update draw stats
+			const [updatedWallet, juetengBet, walletTx, updatedDraw] = await prisma.$transaction([
+				prisma.wallet.update({
+					where: { id: wallet.id },
+					data: { balance: newBalance },
+				}),
+				prisma.juetengBet.create({
+					data: {
+						drawId,
+						bettorId,
+						cobradorId,
+						caboId,
+						number1,
+						number2,
+						combinationKey,
+						amount,
+						currency: currency ?? "PHP",
+						status: "PENDING",
+						isWinner: false,
+						reference,
+					},
+				}),
+				prisma.transaction.create({
+					data: {
+						userId: bettorId,
+						walletId: wallet.id,
+						type: "JUETENG_BET",
+						amount,
+						balanceBefore: wallet.balance,
+						balanceAfter: newBalance,
+						currency: wallet.currency,
+						status: "COMPLETED",
+						reference: txReference,
+						description: `Bet placed on ${typeAbbr === "MRN" ? "Morning" : "Afternoon"} draw — ${combinationKey}`,
+					},
+				}),
+				prisma.juetengDraw.update({
+					where: { id: drawId },
+					data: {
+						totalBets: { increment: 1 },
+						totalStake: { increment: amount },
+						grossProfit: { increment: amount },
+					},
+				}),
+			]);
 			juetengBetLogger.info(`JuetengBet created successfully: ${juetengBet.id}`);
 
 			logActivity(req, {
@@ -275,9 +330,7 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			if (!id) {
 				juetengBetLogger.error(config.ERROR.QUERY_PARAMS.MISSING_ID);
-				res.status(400).json(
-					buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400),
-				);
+				res.status(400).json(buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400));
 				return;
 			}
 
@@ -344,9 +397,7 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			if (!id) {
 				juetengBetLogger.error(config.ERROR.QUERY_PARAMS.MISSING_ID);
-				res.status(400).json(
-					buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400),
-				);
+				res.status(400).json(buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400));
 				return;
 			}
 
@@ -361,9 +412,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			if (Object.keys(req.body).length === 0) {
 				juetengBetLogger.error(config.ERROR.COMMON.NO_UPDATE_FIELDS);
-				res.status(400).json(
-					buildErrorResponse(config.ERROR.COMMON.NO_UPDATE_FIELDS, 400),
-				);
+				res.status(400).json(buildErrorResponse(config.ERROR.COMMON.NO_UPDATE_FIELDS, 400));
 				return;
 			}
 
@@ -413,9 +462,7 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			if (!id) {
 				juetengBetLogger.error(config.ERROR.QUERY_PARAMS.MISSING_ID);
-				res.status(400).json(
-					buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400),
-				);
+				res.status(400).json(buildErrorResponse(config.ERROR.QUERY_PARAMS.MISSING_ID, 400));
 				return;
 			}
 
@@ -441,9 +488,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			juetengBetLogger.info(`${config.SUCCESS.JUETENGBET.DELETED}: ${id}`);
-			res.status(200).json(
-				buildSuccessResponse(config.SUCCESS.JUETENGBET.DELETED, {}, 200),
-			);
+			res.status(200).json(buildSuccessResponse(config.SUCCESS.JUETENGBET.DELETED, {}, 200));
 		} catch (error) {
 			juetengBetLogger.error(`${config.ERROR.JUETENGBET.DELETE_FAILED}: ${error}`);
 			res.status(500).json(

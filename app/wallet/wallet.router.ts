@@ -7,11 +7,217 @@ interface IController {
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getMyWallet(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getMyTransactions(req: Request, res: Response, next: NextFunction): Promise<void>;
+	requestDeposit(req: Request, res: Response, next: NextFunction): Promise<void>;
+	requestWithdraw(req: Request, res: Response, next: NextFunction): Promise<void>;
+	approveTransaction(req: Request, res: Response, next: NextFunction): Promise<void>;
+	rejectTransaction(req: Request, res: Response, next: NextFunction): Promise<void>;
+	adminGetAllTransactions(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
 	const routes = Router();
 	const path = "/wallet";
+
+	// ─── Player Wallet Endpoints (must be before /:id) ────────────────────────
+
+	/**
+	 * @openapi
+	 * /api/wallet/me:
+	 *   get:
+	 *     summary: Get current user's wallet
+	 *     description: Returns the authenticated user's wallet with balance, recent transactions, and summary stats
+	 *     tags: [Wallet]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     responses:
+	 *       200:
+	 *         description: Wallet retrieved successfully
+	 *       401:
+	 *         $ref: '#/components/responses/Unauthorized'
+	 *       404:
+	 *         $ref: '#/components/responses/NotFound'
+	 */
+	routes.get("/me", controller.getMyWallet);
+
+	/**
+	 * @openapi
+	 * /api/wallet/transactions:
+	 *   get:
+	 *     summary: Get current user's transactions
+	 *     description: Paginated transaction history for the authenticated user
+	 *     tags: [Wallet]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: query
+	 *         name: page
+	 *         schema:
+	 *           type: integer
+	 *       - in: query
+	 *         name: limit
+	 *         schema:
+	 *           type: integer
+	 *       - in: query
+	 *         name: type
+	 *         schema:
+	 *           type: string
+	 *           enum: [DEPOSIT, WITHDRAWAL, JUETENG_BET, JUETENG_PAYOUT, COMMISSION_PAYOUT, ADJUSTMENT]
+	 *     responses:
+	 *       200:
+	 *         description: Transactions retrieved successfully
+	 */
+	routes.get("/transactions", controller.getMyTransactions);
+
+	/**
+	 * @openapi
+	 * /api/wallet/deposit:
+	 *   post:
+	 *     summary: Request a deposit
+	 *     description: Create a pending deposit request for admin approval
+	 *     tags: [Wallet]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required: [amount, paymentMethod]
+	 *             properties:
+	 *               amount:
+	 *                 type: number
+	 *                 minimum: 50
+	 *                 maximum: 50000
+	 *               paymentMethod:
+	 *                 type: string
+	 *               referenceNumber:
+	 *                 type: string
+	 *     responses:
+	 *       201:
+	 *         description: Deposit request created
+	 */
+	routes.post("/deposit", controller.requestDeposit);
+
+	/**
+	 * @openapi
+	 * /api/wallet/withdraw:
+	 *   post:
+	 *     summary: Request a withdrawal
+	 *     description: Create a pending withdrawal request for admin approval
+	 *     tags: [Wallet]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required: [amount, paymentMethod, accountNumber, accountName]
+	 *             properties:
+	 *               amount:
+	 *                 type: number
+	 *                 minimum: 100
+	 *               paymentMethod:
+	 *                 type: string
+	 *               accountNumber:
+	 *                 type: string
+	 *               accountName:
+	 *                 type: string
+	 *     responses:
+	 *       201:
+	 *         description: Withdrawal request created
+	 */
+	routes.post("/withdraw", controller.requestWithdraw);
+
+	/**
+	 * @openapi
+	 * /api/wallet/transaction/{id}/approve:
+	 *   patch:
+	 *     summary: Approve a pending transaction
+	 *     description: Admin approves a deposit or withdrawal — updates wallet balance
+	 *     tags: [Wallet]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *     responses:
+	 *       200:
+	 *         description: Transaction approved
+	 */
+	routes.patch("/transaction/:id/approve", controller.approveTransaction);
+
+	/**
+	 * @openapi
+	 * /api/wallet/transaction/{id}/reject:
+	 *   patch:
+	 *     summary: Reject a pending transaction
+	 *     description: Admin rejects a deposit or withdrawal request
+	 *     tags: [Wallet]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *     requestBody:
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               reason:
+	 *                 type: string
+	 *     responses:
+	 *       200:
+	 *         description: Transaction rejected
+	 */
+	routes.patch("/transaction/:id/reject", controller.rejectTransaction);
+
+	/**
+	 * @openapi
+	 * /api/wallet/admin/transactions:
+	 *   get:
+	 *     summary: Get all transactions (Admin)
+	 *     description: Admin endpoint to list all platform transactions with filtering and pagination
+	 *     tags: [Wallet]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: query
+	 *         name: page
+	 *         schema:
+	 *           type: integer
+	 *       - in: query
+	 *         name: limit
+	 *         schema:
+	 *           type: integer
+	 *       - in: query
+	 *         name: type
+	 *         schema:
+	 *           type: string
+	 *       - in: query
+	 *         name: status
+	 *         schema:
+	 *           type: string
+	 *     responses:
+	 *       200:
+	 *         description: Transactions retrieved
+	 *       403:
+	 *         description: Forbidden
+	 */
+	routes.get("/admin/transactions", controller.adminGetAllTransactions);
+
+	// ─── Generic CRUD Endpoints ───────────────────────────────────────────────
 
 	/**
 	 * @openapi
