@@ -44,11 +44,38 @@ jobs:
           echo "Set GCP_SA_KEY OR set both GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT."
           exit 1
 
+      - name: Normalize GCP service account key
+        id: sa_key
+        if: ${{ secrets.GCP_SA_KEY != '' }}
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          RAW_KEY="${GCP_SA_KEY}"
+          JSON_KEY=""
+
+          if printf '%s' "${RAW_KEY}" | jq -e . >/dev/null 2>&1; then
+            JSON_KEY="${RAW_KEY}"
+          else
+            DECODED_KEY="$(printf '%s' "${RAW_KEY}" | base64 --decode 2>/dev/null || true)"
+            if [ -n "${DECODED_KEY}" ] && printf '%s' "${DECODED_KEY}" | jq -e . >/dev/null 2>&1; then
+              JSON_KEY="${DECODED_KEY}"
+            else
+              echo "GCP_SA_KEY is invalid. Use raw service-account JSON or base64-encoded JSON."
+              exit 1
+            fi
+          fi
+
+          {
+            echo "credentials_json<<EOF"
+            printf '%s\n' "${JSON_KEY}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Authenticate to Google Cloud (Service Account Key)
         if: ${{ secrets.GCP_SA_KEY != '' }}
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ steps.sa_key.outputs.credentials_json }}
 
       - name: Authenticate to Google Cloud (Workload Identity)
         if: ${{ secrets.GCP_SA_KEY == '' && secrets.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.GCP_SERVICE_ACCOUNT != '' }}
