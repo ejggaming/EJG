@@ -10,6 +10,7 @@ export const CreateJuetengConfigSchema = z.object({
 	cobradorRate: z.number().min(0).max(1).optional(),
 	caboRate: z.number().min(0).max(1).optional(),
 	capitalistaRate: z.number().min(0).max(1).optional(),
+	governmentRate: z.number().min(0).max(1).optional(),
 	currency: z.string().optional(),
 	isActive: z.boolean().optional(),
 });

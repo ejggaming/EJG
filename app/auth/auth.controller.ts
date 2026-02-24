@@ -46,8 +46,17 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		const { email, password, firstName, lastName, middleName, phoneNumber, userName, role } =
-			validation.data;
+		const {
+			email,
+			password,
+			firstName,
+			lastName,
+			middleName,
+			phoneNumber,
+			userName,
+			role,
+			dateOfBirth,
+		} = validation.data;
 
 		try {
 			// Check if user already exists
@@ -81,6 +90,15 @@ export const controller = (prisma: PrismaClient) => {
 						firstName,
 						lastName,
 						middleName: middleName || undefined,
+						dateOfBirth,
+						age: (() => {
+							const t = new Date();
+							const a = t.getFullYear() - dateOfBirth.getFullYear();
+							const m = t.getMonth() - dateOfBirth.getMonth();
+							return m < 0 || (m === 0 && t.getDate() < dateOfBirth.getDate())
+								? a - 1
+								: a;
+						})(),
 					},
 					contactInfo: {
 						email,
@@ -114,6 +132,16 @@ export const controller = (prisma: PrismaClient) => {
 					currency: "PHP",
 				},
 			});
+
+			// If user registered as AGENT, create linked agent profile
+			if (user.role === "AGENT") {
+				await prisma.agent.create({
+					data: {
+						userId: user.id,
+						role: "COBRADOR",
+					},
+				});
+			}
 
 			// Generate JWT tokens
 			const accessToken = jwt.sign(
@@ -213,6 +241,8 @@ export const controller = (prisma: PrismaClient) => {
 					role: user.role,
 					isEmailVerified: user.isEmailVerified,
 					isPhoneVerified: user.isPhoneVerified,
+					dateOfBirth: person.personalInfo?.dateOfBirth,
+					age: person.personalInfo?.age,
 				},
 				accessToken,
 			};
@@ -276,6 +306,25 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				res.status(403).json(errorResponse);
 				return;
+			}
+
+			// Block login if user is under 18
+			const dob = user.person?.personalInfo?.dateOfBirth;
+			if (dob) {
+				const t = new Date();
+				const a = t.getFullYear() - dob.getFullYear();
+				const m = t.getMonth() - dob.getMonth();
+				const age = m < 0 || (m === 0 && t.getDate() < dob.getDate()) ? a - 1 : a;
+				if (age < 18) {
+					authLogger.warn(`Login blocked for underage account: ${email}`);
+					res.status(403).json(
+						buildErrorResponse(
+							"Access denied. You must be at least 18 years old.",
+							403,
+						),
+					);
+					return;
+				}
 			}
 
 			// Block login if email is not verified
@@ -407,6 +456,8 @@ export const controller = (prisma: PrismaClient) => {
 						? {
 								firstName: user.person.personalInfo.firstName,
 								lastName: user.person.personalInfo.lastName,
+								dateOfBirth: user.person.personalInfo.dateOfBirth,
+								age: user.person.personalInfo.age,
 							}
 						: undefined,
 				},

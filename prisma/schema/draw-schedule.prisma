@@ -1,6 +1,7 @@
 enum DrawType {
   MORNING   // ~11:00 AM Asia/Manila
   AFTERNOON // ~4:00 PM Asia/Manila
+  EVENING   // ~9:00 PM Asia/Manila
 }
 
 // Defines the recurring daily draw schedule (morning + afternoon)

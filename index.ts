@@ -91,6 +91,7 @@ const juetengbet = require("./app/juetengbet")(prisma);
 const juetengconfig = require("./app/juetengconfig")(prisma);
 const juetengpayout = require("./app/juetengpayout")(prisma);
 const commission = require("./app/commission")(prisma);
+const reports = require("./app/reports")(prisma);
 const auth = require("./app/auth")(prisma);
 const notification = require("./app/notification")(prisma);
 const docs = require("./app/docs/docs");
@@ -205,6 +206,7 @@ app.use(config.baseApiPath, juetengbet);
 app.use(config.baseApiPath, juetengconfig);
 app.use(config.baseApiPath, juetengpayout);
 app.use(config.baseApiPath, commission);
+app.use(config.baseApiPath, reports);
 app.use(config.baseApiPath, notification);
 app.use(config.baseApiPath, docs(prisma, app));
 

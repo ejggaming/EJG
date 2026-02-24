@@ -7,11 +7,19 @@ interface IController {
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getMyCommissions(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getSummary(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
 	const routes = Router();
 	const path = "/commission";
+
+	// Agent: get own commission history (must be before /:id to avoid conflict)
+	routes.get("/me", controller.getMyCommissions);
+
+	// Agent: get commission summary stats
+	routes.get("/summary", controller.getSummary);
 
 	/**
 	 * @openapi

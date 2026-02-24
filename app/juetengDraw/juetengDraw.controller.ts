@@ -119,6 +119,17 @@ async function settleBetsForDraw(
 						payoutAmount,
 					},
 				});
+
+				// Emit real-time events to the winner
+				if (io) {
+					io.to(`user:${bet.bettorId}`).emit("bet:won", {
+						betId: bet.id,
+						drawId: draw.id,
+						winAmount: payoutAmount,
+						combinationKey: bet.combinationKey,
+					});
+					io.to(`user:${bet.bettorId}`).emit("wallet:updated", { newBalance });
+				}
 			}
 		} else {
 			// Mark as LOST
@@ -126,6 +137,128 @@ async function settleBetsForDraw(
 				where: { id: bet.id },
 				data: { status: "LOST", isWinner: false, settledAt: new Date() },
 			});
+		}
+	}
+
+	// ── Commission creation + agent wallet crediting ──────────────────────────
+	const totalStake = pendingBets.reduce((s, b) => s + b.amount, 0);
+	const cobradorRate = gameConfig?.cobradorRate ?? 0;
+	const caboRate = gameConfig?.caboRate ?? 0;
+	const capitalistaRate = gameConfig?.capitalistaRate ?? 0;
+
+	// 1. Cobrador commissions — cobradorRate % of stake they collected
+	const stakeByCobradorId = pendingBets.reduce<Record<string, number>>((acc, bet) => {
+		if (bet.cobradorId) acc[bet.cobradorId] = (acc[bet.cobradorId] ?? 0) + bet.amount;
+		return acc;
+	}, {});
+	for (const [cobradorId, baseAmount] of Object.entries(stakeByCobradorId)) {
+		const commAmount = baseAmount * cobradorRate;
+		if (commAmount <= 0) continue;
+		try {
+			const comm = await prisma.drawCommission.create({
+				data: { agentId: cobradorId, drawId: draw.id, type: "COLLECTION", rate: cobradorRate, baseAmount, amount: commAmount, status: "PENDING" },
+			});
+			const agentRecord = await prisma.agent.findFirst({ where: { id: cobradorId } });
+			if (agentRecord) {
+				const agentWallet = await prisma.wallet.findFirst({ where: { userId: agentRecord.userId } });
+				if (agentWallet) {
+					const newBal = agentWallet.balance + commAmount;
+					await prisma.wallet.update({ where: { id: agentWallet.id }, data: { balance: newBal } });
+					await prisma.transaction.create({ data: {
+						userId: agentRecord.userId, walletId: agentWallet.id,
+						type: "COMMISSION_PAYOUT", amount: commAmount,
+						balanceBefore: agentWallet.balance, balanceAfter: newBal,
+						currency: agentWallet.currency, status: "COMPLETED",
+						reference: `COMM-${comm.id}`,
+						description: `Cobrador commission for draw ${draw.id}`,
+					}});
+					await prisma.drawCommission.update({ where: { id: comm.id }, data: { status: "PAID" } });
+					if (io) io.to(`user:${agentRecord.userId}`).emit("wallet:updated", { newBalance: newBal });
+					notifyUser(prisma, io, agentRecord.userId, {
+						type: "COMMISSION", title: "Commission Credited",
+						body: `₱${commAmount.toLocaleString()} cobrador commission credited to your wallet.`,
+						metadata: { commissionId: comm.id, drawId: draw.id },
+					});
+				}
+			}
+		} catch (err) {
+			juetengDrawLogger.error(`Failed to process cobrador commission for ${cobradorId}: ${err}`);
+		}
+	}
+
+	// 2. Cabo commissions — caboRate % of winner payouts under their bets
+	const winningBetsList = pendingBets.filter((b) => b.combinationKey === draw.combinationKey);
+	const payoutByCaboId = winningBetsList.reduce<Record<string, number>>((acc, bet) => {
+		if (bet.caboId) acc[bet.caboId] = (acc[bet.caboId] ?? 0) + bet.amount * multiplier;
+		return acc;
+	}, {});
+	for (const [caboId, baseAmount] of Object.entries(payoutByCaboId)) {
+		const commAmount = baseAmount * caboRate;
+		if (commAmount <= 0) continue;
+		try {
+			const comm = await prisma.drawCommission.create({
+				data: { agentId: caboId, drawId: draw.id, type: "WINNER_BONUS", rate: caboRate, baseAmount, amount: commAmount, status: "PENDING" },
+			});
+			const agentRecord = await prisma.agent.findFirst({ where: { id: caboId } });
+			if (agentRecord) {
+				const agentWallet = await prisma.wallet.findFirst({ where: { userId: agentRecord.userId } });
+				if (agentWallet) {
+					const newBal = agentWallet.balance + commAmount;
+					await prisma.wallet.update({ where: { id: agentWallet.id }, data: { balance: newBal } });
+					await prisma.transaction.create({ data: {
+						userId: agentRecord.userId, walletId: agentWallet.id,
+						type: "COMMISSION_PAYOUT", amount: commAmount,
+						balanceBefore: agentWallet.balance, balanceAfter: newBal,
+						currency: agentWallet.currency, status: "COMPLETED",
+						reference: `COMM-${comm.id}`,
+						description: `Cabo commission for draw ${draw.id}`,
+					}});
+					await prisma.drawCommission.update({ where: { id: comm.id }, data: { status: "PAID" } });
+					if (io) io.to(`user:${agentRecord.userId}`).emit("wallet:updated", { newBalance: newBal });
+					notifyUser(prisma, io, agentRecord.userId, {
+						type: "COMMISSION", title: "Commission Credited",
+						body: `₱${commAmount.toLocaleString()} cabo commission credited to your wallet.`,
+						metadata: { commissionId: comm.id, drawId: draw.id },
+					});
+				}
+			}
+		} catch (err) {
+			juetengDrawLogger.error(`Failed to process cabo commission for ${caboId}: ${err}`);
+		}
+	}
+
+	// 3. Capitalista commissions — capitalistaRate % of total stake
+	if (capitalistaRate > 0 && totalStake > 0) {
+		try {
+			const capitalistaAgents = await prisma.agent.findMany({ where: { role: "CAPITALISTA", isActive: true } });
+			for (const agentRecord of capitalistaAgents) {
+				const commAmount = totalStake * capitalistaRate;
+				const comm = await prisma.drawCommission.create({
+					data: { agentId: agentRecord.id, drawId: draw.id, type: "CAPITALISTA", rate: capitalistaRate, baseAmount: totalStake, amount: commAmount, status: "PENDING" },
+				});
+				const agentWallet = await prisma.wallet.findFirst({ where: { userId: agentRecord.userId } });
+				if (agentWallet) {
+					const newBal = agentWallet.balance + commAmount;
+					await prisma.wallet.update({ where: { id: agentWallet.id }, data: { balance: newBal } });
+					await prisma.transaction.create({ data: {
+						userId: agentRecord.userId, walletId: agentWallet.id,
+						type: "COMMISSION_PAYOUT", amount: commAmount,
+						balanceBefore: agentWallet.balance, balanceAfter: newBal,
+						currency: agentWallet.currency, status: "COMPLETED",
+						reference: `COMM-${comm.id}`,
+						description: `Capitalista commission for draw ${draw.id}`,
+					}});
+					await prisma.drawCommission.update({ where: { id: comm.id }, data: { status: "PAID" } });
+					if (io) io.to(`user:${agentRecord.userId}`).emit("wallet:updated", { newBalance: newBal });
+					notifyUser(prisma, io, agentRecord.userId, {
+						type: "COMMISSION", title: "Commission Credited",
+						body: `₱${commAmount.toLocaleString()} capitalista commission credited to your wallet.`,
+						metadata: { commissionId: comm.id, drawId: draw.id },
+					});
+				}
+			}
+		} catch (err) {
+			juetengDrawLogger.error(`Failed to process capitalista commissions for draw ${draw.id}: ${err}`);
 		}
 	}
 
@@ -139,6 +272,17 @@ async function settleBetsForDraw(
 			settledAt: new Date(),
 		},
 	});
+
+	// Broadcast draw:result to all connected clients
+	if (io) {
+		io.emit("draw:result", {
+			drawId: draw.id,
+			combinationKey: draw.combinationKey,
+			number1: draw.number1,
+			number2: draw.number2,
+			timestamp: new Date().toISOString(),
+		});
+	}
 
 	const winners = pendingBets.filter((b) => b.combinationKey === draw.combinationKey).length;
 	juetengDrawLogger.info(

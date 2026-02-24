@@ -11,6 +11,7 @@ model JuetengConfig {
   cobradorRate     Float    @default(0.15) // 15% of stake goes to collector
   caboRate         Float    @default(0.05) // 5% of winner payout to supervisor
   capitalistaRate  Float    @default(0.25) // 25% of total collections to financier
+  governmentRate   Float    @default(0.0)  // % of total collections remitted to government
   currency         String   @default("PHP")
   isActive         Boolean  @default(true)
   createdAt        DateTime @default(now())

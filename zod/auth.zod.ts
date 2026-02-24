@@ -20,6 +20,19 @@ export const RegisterSchema = z.object({
 		.optional(),
 	userName: z.string().min(3, "Username must be at least 3 characters").optional(),
 	role: z.enum(["PLAYER", "AGENT"]).default("PLAYER"),
+	dateOfBirth: z.coerce
+		.date({ required_error: "Date of birth is required" })
+		.refine(
+			(dob) => {
+				const today = new Date();
+				const age = today.getFullYear() - dob.getFullYear();
+				const m = today.getMonth() - dob.getMonth();
+				const actualAge =
+					m < 0 || (m === 0 && today.getDate() < dob.getDate()) ? age - 1 : age;
+				return actualAge >= 18;
+			},
+			{ message: "You must be at least 18 years old to register" },
+		),
 });
 
 // ── Login ──

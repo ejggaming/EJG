@@ -1,46 +1,22 @@
 import { PrismaClient } from "../../generated/prisma";
+import { seedConfig } from "./configSeeder";
 
 const prisma = new PrismaClient();
 
 export async function seedJuetengData() {
   console.log("Seeding Jueteng data...");
 
-  // ── Config ───────────────────────────────────────────────────────────────────
-  await prisma.juetengConfig.create({
-    data: {
-      maxNumber: 37,
-      allowRepeat: true,
-      payoutMultiplier: 500,
-      minBet: 1,
-      maxBet: 1000,
-      cobradorRate: 0.15,
-      caboRate: 0.05,
-      capitalistaRate: 0.25,
-      currency: "PHP",
-      isActive: true,
-    },
-  });
+  // ── Config + Draw schedules (delegated to configSeeder — idempotent) ──────────
+  await seedConfig();
 
-  // ── Draw schedules ────────────────────────────────────────────────────────────
-  const morningSchedule = await prisma.drawSchedule.create({
-    data: {
-      drawType: "MORNING",
-      scheduledTime: "11:00",
-      cutoffMinutes: 5,
-      timeZone: "Asia/Manila",
-      isActive: true,
-    },
-  });
+  // Retrieve schedules for draw instance creation
+  const morningSchedule = await prisma.drawSchedule.findFirst({ where: { drawType: "MORNING" } });
+  const afternoonSchedule = await prisma.drawSchedule.findFirst({ where: { drawType: "AFTERNOON" } });
 
-  const afternoonSchedule = await prisma.drawSchedule.create({
-    data: {
-      drawType: "AFTERNOON",
-      scheduledTime: "16:00",
-      cutoffMinutes: 5,
-      timeZone: "Asia/Manila",
-      isActive: true,
-    },
-  });
+  if (!morningSchedule || !afternoonSchedule) {
+    console.error("❌ Schedules not found after seeding — cannot create draws.");
+    return;
+  }
 
   // ── Territory ─────────────────────────────────────────────────────────────────
   const territory = await prisma.territory.create({
@@ -79,8 +55,6 @@ export async function seedJuetengData() {
   });
 
   console.log("Jueteng seed complete:");
-  console.log("  Config: payoutMultiplier=500×, maxNumber=37");
-  console.log("  Schedules: MORNING 11:00, AFTERNOON 16:00");
   console.log(`  Territory: ${territory.name}, ${territory.province}`);
-  console.log("  Draws: 2 created for today");
+  console.log("  Draws: 2 created for today (MORNING + AFTERNOON)");
 }

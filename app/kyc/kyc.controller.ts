@@ -49,6 +49,12 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 
+		// ── Always use userId from JWT (prevent body spoofing) ─────────────
+		const jwtUserId = (req as any).userId;
+		if (jwtUserId) {
+			requestData.userId = jwtUserId;
+		}
+
 		// ── Upload files to Cloudinary if present ──────────────────────────
 		try {
 			const files = req.files as Record<string, Express.Multer.File[]> | undefined;
@@ -96,7 +102,7 @@ export const controller = (prisma: PrismaClient) => {
 			kycLogger.info(`Kyc created successfully: ${kyc.id}`);
 
 			logActivity(req, {
-				userId: (req as any).user?.id || "unknown",
+				userId: jwtUserId || "unknown",
 				action: config.ACTIVITY_LOG.KYC.ACTIONS.CREATE_KYC,
 				description: `${config.ACTIVITY_LOG.KYC.DESCRIPTIONS.KYC_CREATED}: ${kyc.id}`,
 				page: {
@@ -106,7 +112,7 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			logAudit(req, {
-				userId: (req as any).user?.id || "unknown",
+				userId: jwtUserId || "unknown",
 				action: config.AUDIT_LOG.ACTIONS.CREATE,
 				resource: config.AUDIT_LOG.RESOURCES.KYC,
 				severity: config.AUDIT_LOG.SEVERITY.LOW,
@@ -153,6 +159,33 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(500).json(errorResponse);
 		}
 	};
+
+	// ── GET /kyc/me — Current user's own KYC record ─────────────────────────
+	const getMyKyc = async (req: Request, res: Response, _next: NextFunction) => {
+		const userId = (req as any).userId;
+
+		if (!userId) {
+			res.status(401).json(buildErrorResponse("Unauthorized", 401));
+			return;
+		}
+
+		try {
+			// userId is @unique in KYC — one record per user
+			const kyc = await prisma.kYC.findUnique({
+				where: { userId },
+			});
+
+			kycLogger.info(`getMyKyc for user ${userId}: ${kyc ? kyc.id : "none"}`);
+			const successResponse = buildSuccessResponse("KYC record retrieved", { kyc }, 200);
+			res.status(200).json(successResponse);
+		} catch (error) {
+			kycLogger.error(`getMyKyc error: ${error}`);
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
+		}
+	};
+
 	const getAll = async (req: Request, res: Response, _next: NextFunction) => {
 		const validationResult = validateQueryParams(req, kycLogger);
 
@@ -336,7 +369,20 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const prismaData = { ...validatedData };
+			const prismaData: Record<string, any> = { ...validatedData };
+
+			// Auto-set reviewedAt and reviewedBy when admin changes KYC status
+			const reviewedStatuses = ["APPROVED", "REJECTED", "REQUIRES_MORE_INFO"];
+			if (
+				validatedData.status &&
+				reviewedStatuses.includes(validatedData.status) &&
+				existingKyc.status !== validatedData.status
+			) {
+				prismaData.reviewedAt = new Date();
+				if (!prismaData.reviewedBy) {
+					prismaData.reviewedBy = (req as any).userId || null;
+				}
+			}
 
 			const updatedKyc = await prisma.kYC.update({
 				where: { id },
@@ -450,5 +496,5 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { create, getAll, getById, update, remove };
+	return { create, getAll, getById, getMyKyc, update, remove };
 };

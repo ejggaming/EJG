@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // Create DrawSchedule Schema
 export const CreateDrawScheduleSchema = z.object({
-	drawType: z.enum(["MORNING", "AFTERNOON"]),
+	drawType: z.enum(["MORNING", "AFTERNOON", "EVENING"]),
 	scheduledTime: z.string().min(1),
 	cutoffMinutes: z.number().int().min(0).optional(),
 	timeZone: z.string().optional(),

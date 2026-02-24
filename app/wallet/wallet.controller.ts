@@ -25,6 +25,7 @@ import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
 import { notifyAdmins } from "../../utils/notifyAdmins";
 import { notifyUser } from "../../utils/notifyUser";
+import { createAuditEntry } from "../../utils/tamperProofAudit";
 
 const logger = getLogger();
 const walletLogger = logger.child({ module: "wallet" });
@@ -37,6 +38,50 @@ const toSingleString = (v: unknown): string | undefined => {
 };
 
 export const controller = (prisma: PrismaClient) => {
+	// ─── Transaction Monitoring Helper ────────────────────────────────────────
+	const runTransactionMonitoring = async (
+		userId: string,
+		transactionId: string,
+		amount: number,
+		type: string,
+		req: Request,
+	) => {
+		try {
+			const reasons: string[] = [];
+			if (amount >= 10000) {
+				reasons.push(`Large ${type.toLowerCase()} amount: ₱${amount.toLocaleString()}`);
+			}
+			const oneHourAgo = new Date(Date.now() - 3_600_000);
+			const recentCount = await prisma.transaction.count({
+				where: { userId, createdAt: { gte: oneHourAgo }, status: { in: ["PENDING", "COMPLETED"] } },
+			});
+			if (recentCount >= 3) {
+				reasons.push(`High velocity: ${recentCount} transactions in the last hour`);
+			}
+			if (reasons.length > 0) {
+				const severity = amount >= 50000 ? "CRITICAL" : amount >= 10000 ? "HIGH" : "MEDIUM";
+				await createAuditEntry(prisma, {
+					userId,
+					action: "SUSPICIOUS_TRANSACTION_ALERT",
+					resource: "TRANSACTION",
+					resourceId: transactionId,
+					newValue: { transactionId, amount, type, reasons, severity },
+					ipAddress: req.ip || null,
+					userAgent: req.headers["user-agent"] || null,
+				});
+				walletLogger.warn(`[MONITORING] ${severity} alert: ${reasons.join("; ")} — tx:${transactionId}`);
+				notifyAdmins(prisma, (req as any).io, {
+					type: "SECURITY",
+					title: "⚠️ Suspicious Transaction",
+					body: `${type} of ₱${amount.toLocaleString()} flagged: ${reasons[0]}`,
+					metadata: { transactionId, userId, amount, reasons, severity, alertType: "SUSPICIOUS_TRANSACTION" },
+				}).catch(() => {});
+			}
+		} catch (monitoringError) {
+			walletLogger.warn(`Transaction monitoring failed: ${monitoringError}`);
+		}
+	};
+
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
 		let requestData = req.body;
 		const contentType = req.get("Content-Type") || "";
@@ -554,6 +599,9 @@ export const controller = (prisma: PrismaClient) => {
 				page: { url: req.originalUrl, title: "Wallet Deposit" },
 			});
 
+			// Transaction monitoring (non-blocking)
+			runTransactionMonitoring(userId, transaction.id, validation.data.amount, "DEPOSIT", req).catch(() => {});
+
 			res.status(201).json(
 				buildSuccessResponse("Deposit request submitted", { transaction }, 201),
 			);
@@ -637,6 +685,9 @@ export const controller = (prisma: PrismaClient) => {
 				description: `Withdrawal request of ${validation.data.amount} ${wallet.currency} to ${validation.data.paymentMethod}`,
 				page: { url: req.originalUrl, title: "Wallet Withdrawal" },
 			});
+
+			// Transaction monitoring (non-blocking)
+			runTransactionMonitoring(userId, transaction.id, validation.data.amount, "WITHDRAWAL", req).catch(() => {});
 
 			res.status(201).json(
 				buildSuccessResponse("Withdrawal request submitted", { transaction }, 201),
@@ -722,6 +773,18 @@ export const controller = (prisma: PrismaClient) => {
 				description: `Approved ${transaction.type} of ${transaction.amount} ${wallet.currency}`,
 			});
 
+			// Write tamper-proof local audit entry
+			createAuditEntry(prisma, {
+				userId: adminId,
+				action: "TRANSACTION_APPROVED",
+				resource: "TRANSACTION",
+				resourceId: txId,
+				oldValue: { status: "PENDING", balance: wallet.balance },
+				newValue: { status: "COMPLETED", type: transaction.type, amount: transaction.amount, newBalance },
+				ipAddress: req.ip || null,
+				userAgent: req.headers["user-agent"] || null,
+			}).catch(() => {});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Transaction approved",
@@ -777,6 +840,18 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			walletLogger.info(`Transaction ${txId} rejected by admin ${adminId}`);
+
+			// Write tamper-proof local audit entry
+			createAuditEntry(prisma, {
+				userId: adminId,
+				action: "TRANSACTION_REJECTED",
+				resource: "TRANSACTION",
+				resourceId: txId,
+				oldValue: { status: "PENDING" },
+				newValue: { status: "FAILED", type: transaction.type, amount: transaction.amount, reason: reason || null },
+				ipAddress: req.ip || null,
+				userAgent: req.headers["user-agent"] || null,
+			}).catch(() => {});
 
 			res.status(200).json(
 				buildSuccessResponse("Transaction rejected", { transaction: updatedTx }, 200),
@@ -861,6 +936,48 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	// ─── GET /wallet/admin/alerts — Admin: list suspicious transaction alerts ─
+	const adminGetAlerts = async (req: Request, res: Response, _next: NextFunction) => {
+		const role = (req as any).role;
+		if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
+			res.status(403).json(buildErrorResponse("Forbidden", 403));
+			return;
+		}
+		const page = parseInt(req.query.page as string) || 1;
+		const limit = parseInt(req.query.limit as string) || 50;
+		const skip = (page - 1) * limit;
+		try {
+			const [alerts, total] = await Promise.all([
+				prisma.auditLog.findMany({
+					where: { action: "SUSPICIOUS_TRANSACTION_ALERT" },
+					orderBy: { createdAt: "desc" },
+					skip,
+					take: limit,
+					include: { user: { select: { email: true, role: true } } },
+				}),
+				prisma.auditLog.count({ where: { action: "SUSPICIOUS_TRANSACTION_ALERT" } }),
+			]);
+			const mapped = alerts.map((a) => ({
+				id: a.id,
+				transactionId: a.resourceId,
+				userId: a.userId,
+				userEmail: a.user?.email ?? "Unknown",
+				details: a.newValue,
+				createdAt: a.createdAt,
+			}));
+			res.status(200).json(
+				buildSuccessResponse("Alerts retrieved", {
+					alerts: mapped,
+					count: total,
+					pagination: buildPagination(total, page, limit),
+				}),
+			);
+		} catch (error) {
+			walletLogger.error(`Error getting transaction alerts: ${error}`);
+			res.status(500).json(buildErrorResponse("Internal server error", 500));
+		}
+	};
+
 	return {
 		create,
 		getAll,
@@ -874,5 +991,6 @@ export const controller = (prisma: PrismaClient) => {
 		approveTransaction,
 		rejectTransaction,
 		adminGetAllTransactions,
+		adminGetAlerts,
 	};
 };

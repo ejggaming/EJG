@@ -14,6 +14,7 @@ interface IController {
 	approveTransaction(req: Request, res: Response, next: NextFunction): Promise<void>;
 	rejectTransaction(req: Request, res: Response, next: NextFunction): Promise<void>;
 	adminGetAllTransactions(req: Request, res: Response, next: NextFunction): Promise<void>;
+	adminGetAlerts(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -216,6 +217,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         description: Forbidden
 	 */
 	routes.get("/admin/transactions", controller.adminGetAllTransactions);
+	routes.get("/admin/alerts", controller.adminGetAlerts);
 
 	// ─── Generic CRUD Endpoints ───────────────────────────────────────────────
 

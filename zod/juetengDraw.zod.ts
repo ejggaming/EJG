@@ -13,7 +13,7 @@ export type RecordResult = z.infer<typeof RecordResultSchema>;
 export const CreateJuetengDrawSchema = z.object({
 	scheduleId: z.string().min(1),
 	drawDate: z.coerce.date(),
-	drawType: z.enum(["MORNING", "AFTERNOON"]),
+	drawType: z.enum(["MORNING", "AFTERNOON", "EVENING"]),
 	status: z.enum(["SCHEDULED", "OPEN", "CLOSED", "DRAWN", "SETTLED", "CANCELLED"]).optional(),
 	scheduledAt: z.coerce.date(),
 	openedAt: z.coerce.date().optional(),

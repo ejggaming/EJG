@@ -5,6 +5,7 @@ import { uploadKycFiles } from "../../middleware/upload";
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getMyKyc(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -63,6 +64,21 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
+	/**
+	 * @openapi
+	 * /api/kyc/me:
+	 *   get:
+	 *     summary: Get current user's KYC record
+	 *     description: Returns the authenticated user's own KYC submission (latest)
+	 *     tags: [Kyc]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     responses:
+	 *       200:
+	 *         description: KYC record retrieved (null if not submitted yet)
+	 */
+	routes.get("/me", controller.getMyKyc);
+
 	// Cache individual kyc with predictable key for invalidation
 	routes.get(
 		"/:id",

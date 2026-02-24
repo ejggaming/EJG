@@ -6,9 +6,11 @@ model AuditLog {
   resourceId String?
   oldValue   Json?
   newValue   Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
+  ipAddress    String?
+  userAgent    String?
+  hash         String?  // SHA-256 of this entry's content
+  previousHash String?  // SHA-256 of the immediately preceding entry (chain)
+  createdAt    DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id])
 
