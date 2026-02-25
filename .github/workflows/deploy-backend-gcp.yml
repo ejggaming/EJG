@@ -85,7 +85,28 @@ jobs:
       - name: Push Docker image
         run: docker push "${IMAGE_URI}"
 
+      - name: Validate Cloud Run runtime secrets
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          MISSING=0
+          if [ -z "${JWT_SECRET}" ]; then
+            echo "Missing GitHub secret: JWT_SECRET"
+            MISSING=1
+          fi
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "Missing GitHub secret: DATABASE_URL"
+            MISSING=1
+          fi
+          if [ "${MISSING}" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Deploy to Cloud Run
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           gcloud run deploy "${{ env.SERVICE_NAME }}" \
             --project "${{ env.PROJECT_ID }}" \
@@ -93,7 +114,7 @@ jobs:
             --platform managed \
             --image "${IMAGE_URI}" \
             --allow-unauthenticated \
-            --update-env-vars NODE_ENV=production
+            --update-env-vars "NODE_ENV=production,PORT=8080,JWT_SECRET=${JWT_SECRET},DATABASE_URL=${DATABASE_URL},REDIS_ENABLED=false"
 
       - name: Print service URL
         run: |
