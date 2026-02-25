@@ -137,6 +137,28 @@ async function settleBetsForDraw(
 				where: { id: bet.id },
 				data: { status: "LOST", isWinner: false, settledAt: new Date() },
 			});
+
+			// Notify the loser
+			notifyUser(prisma, io, bet.bettorId, {
+				type: "DRAW_RESULT",
+				title: "Better luck next time!",
+				body: `Your bet ${bet.combinationKey} did not match the winning combination ${draw.combinationKey}. Try again in the next draw!`,
+				metadata: {
+					betId: bet.id,
+					reference: bet.reference,
+					combinationKey: bet.combinationKey,
+					winningCombination: draw.combinationKey,
+				},
+			});
+
+			if (io) {
+				io.to(`user:${bet.bettorId}`).emit("bet:lost", {
+					betId: bet.id,
+					drawId: draw.id,
+					combinationKey: bet.combinationKey,
+					winningCombination: draw.combinationKey,
+				});
+			}
 		}
 	}
 
@@ -922,6 +944,30 @@ export const controller = (prisma: PrismaClient) => {
 					where: { drawId: id, combinationKey: { not: drawnKey } },
 					data: { status: "LOST", settledAt },
 				});
+
+				// Notify each loser
+				const settleIo = (req as any).io;
+				for (const bet of losingBets) {
+					notifyUser(prisma, settleIo, bet.bettorId, {
+						type: "DRAW_RESULT",
+						title: "Better luck next time!",
+						body: `Your bet ${bet.combinationKey} did not match the winning combination ${drawnKey}. Try again in the next draw!`,
+						metadata: {
+							betId: bet.id,
+							reference: bet.reference,
+							combinationKey: bet.combinationKey,
+							winningCombination: drawnKey,
+						},
+					});
+					if (settleIo) {
+						settleIo.to(`user:${bet.bettorId}`).emit("bet:lost", {
+							betId: bet.id,
+							drawId: id,
+							combinationKey: bet.combinationKey,
+							winningCombination: drawnKey,
+						});
+					}
+				}
 			}
 
 			// ── Cobrador commissions: cobradorRate % of their collected stake ──
