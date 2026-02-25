@@ -175,14 +175,14 @@ export const controller = (prisma: PrismaClient) => {
 			res.cookie("token", accessToken, {
 				httpOnly: true,
 				secure: process.env.NODE_ENV === "production",
-				sameSite: "strict",
+				sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 				maxAge: config.jwt.cookieMaxAge,
 			});
 
 			res.cookie("refreshToken", refreshToken, {
 				httpOnly: true,
 				secure: process.env.NODE_ENV === "production",
-				sameSite: "strict",
+				sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 				maxAge: config.jwt.refreshCookieMaxAge,
 				path: "/api/auth/refresh",
 			});
@@ -410,14 +410,14 @@ export const controller = (prisma: PrismaClient) => {
 			res.cookie("token", accessToken, {
 				httpOnly: true,
 				secure: process.env.NODE_ENV === "production",
-				sameSite: "strict",
+				sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 				maxAge: config.jwt.cookieMaxAge,
 			});
 
 			res.cookie("refreshToken", refreshToken, {
 				httpOnly: true,
 				secure: process.env.NODE_ENV === "production",
-				sameSite: "strict",
+				sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 				maxAge: config.jwt.refreshCookieMaxAge,
 				path: "/api/auth/refresh",
 			});
@@ -579,14 +579,14 @@ export const controller = (prisma: PrismaClient) => {
 			res.cookie("token", newAccessToken, {
 				httpOnly: true,
 				secure: process.env.NODE_ENV === "production",
-				sameSite: "strict",
+				sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 				maxAge: config.jwt.cookieMaxAge,
 			});
 
 			res.cookie("refreshToken", newRefreshToken, {
 				httpOnly: true,
 				secure: process.env.NODE_ENV === "production",
-				sameSite: "strict",
+				sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 				maxAge: config.jwt.refreshCookieMaxAge,
 				path: "/api/auth/refresh",
 			});
