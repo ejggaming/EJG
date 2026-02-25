@@ -24,59 +24,22 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Resolve GCP auth inputs
+      - name: Resolve Workload Identity inputs
         id: auth_inputs
         env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
           GCP_WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: |
-          if [ -n "${GCP_WIF_PROVIDER}" ] && [ -n "${GCP_SERVICE_ACCOUNT}" ]; then
-            echo "mode=wif" >> "${GITHUB_OUTPUT}"
-            echo "workload_identity_provider=${GCP_WIF_PROVIDER}" >> "${GITHUB_OUTPUT}"
-            echo "service_account=${GCP_SERVICE_ACCOUNT}" >> "${GITHUB_OUTPUT}"
-            echo "Using Workload Identity auth."
-            exit 0
+          if [ -z "${GCP_WIF_PROVIDER}" ] || [ -z "${GCP_SERVICE_ACCOUNT}" ]; then
+            echo "Missing Workload Identity secrets."
+            echo "Set both GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT."
+            exit 1
           fi
 
-          if [ -n "${GCP_SA_KEY}" ]; then
-            RAW_KEY="${GCP_SA_KEY}"
-            JSON_KEY=""
-
-            if printf '%s' "${RAW_KEY}" | jq -e . >/dev/null 2>&1; then
-              JSON_KEY="${RAW_KEY}"
-            else
-              DECODED_KEY="$(printf '%s' "${RAW_KEY}" | base64 --decode 2>/dev/null || true)"
-              if [ -n "${DECODED_KEY}" ] && printf '%s' "${DECODED_KEY}" | jq -e . >/dev/null 2>&1; then
-                JSON_KEY="${DECODED_KEY}"
-              else
-                echo "GCP_SA_KEY is invalid. Use raw service-account JSON or base64-encoded JSON."
-                exit 1
-              fi
-            fi
-
-            echo "mode=sakey" >> "${GITHUB_OUTPUT}"
-            {
-              echo "credentials_json<<EOF"
-              printf '%s\n' "${JSON_KEY}"
-              echo "EOF"
-            } >> "${GITHUB_OUTPUT}"
-            echo "Using service account key auth."
-            exit 0
-          fi
-
-          echo "Missing GCP auth secrets."
-          echo "Set GCP_SA_KEY OR set both GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT."
-          exit 1
-
-      - name: Authenticate to Google Cloud (Service Account Key)
-        if: ${{ steps.auth_inputs.outputs.mode == 'sakey' }}
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ steps.auth_inputs.outputs.credentials_json }}
+          echo "workload_identity_provider=${GCP_WIF_PROVIDER}" >> "${GITHUB_OUTPUT}"
+          echo "service_account=${GCP_SERVICE_ACCOUNT}" >> "${GITHUB_OUTPUT}"
 
       - name: Authenticate to Google Cloud (Workload Identity)
-        if: ${{ steps.auth_inputs.outputs.mode == 'wif' }}
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ steps.auth_inputs.outputs.workload_identity_provider }}
