@@ -3,8 +3,8 @@
   "version": "1.0.122",
   "main": "dist/lib-entry.js",
   "scripts": {
-    "dev": "dotenv nodemon index.ts",
-    "start": "dotenv nodemon index.ts",
+    "dev": "dotenv -e .env.develop nodemon index.ts",
+    "start": "dotenv -e .env.develop nodemon index.ts",
     "lint": "eslint app/**/*.ts index.ts lib-entry.ts",
     "format": "eslint app/**/*.ts index.ts lib-entry.ts --fix",
     "test": "mocha --require ts-node/register tests/**/*.spec.ts",
