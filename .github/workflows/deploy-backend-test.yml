@@ -1,0 +1,145 @@
+name: Deploy Backend to GCP Cloud Run (Test)
+
+on:
+  push:
+    branches:
+      - test
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: ejg-api-dev        # update if test has its own GCP project
+  REGION: us-central1
+  SERVICE_NAME: ejg-api-backend-test
+  ARTIFACT_REPOSITORY: backend
+  IMAGE_NAME: backend-api
+  ENV_FILE: .env.test
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Resolve service account key
+        id: sa_key
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY_TEST || secrets.GCP_SA_KEY }}
+        run: |
+          if [ -z "${GCP_SA_KEY}" ]; then
+            echo "Missing GCP_SA_KEY_TEST (or GCP_SA_KEY) secret."
+            exit 1
+          fi
+
+          RAW_KEY="${GCP_SA_KEY}"
+          JSON_KEY=""
+
+          if printf '%s' "${RAW_KEY}" | jq -e . >/dev/null 2>&1; then
+            JSON_KEY="${RAW_KEY}"
+          else
+            DECODED_KEY="$(printf '%s' "${RAW_KEY}" | base64 --decode 2>/dev/null || true)"
+            if [ -n "${DECODED_KEY}" ] && printf '%s' "${DECODED_KEY}" | jq -e . >/dev/null 2>&1; then
+              JSON_KEY="${DECODED_KEY}"
+            else
+              echo "GCP_SA_KEY must be raw service-account JSON or base64-encoded JSON."
+              exit 1
+            fi
+          fi
+
+          {
+            echo "credentials_json<<EOF"
+            printf '%s\n' "${JSON_KEY}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ steps.sa_key.outputs.credentials_json }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ env.REGION }}-docker.pkg.dev" --quiet
+
+      - name: Ensure Artifact Registry repository exists
+        run: |
+          gcloud artifacts repositories describe "${{ env.ARTIFACT_REPOSITORY }}" \
+            --location "${{ env.REGION }}" >/dev/null 2>&1 || \
+          gcloud artifacts repositories create "${{ env.ARTIFACT_REPOSITORY }}" \
+            --repository-format docker \
+            --location "${{ env.REGION }}" \
+            --description "Docker images for backend service"
+
+      - name: Build Docker image
+        run: |
+          IMAGE_URI="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "IMAGE_URI=${IMAGE_URI}" >> "${GITHUB_ENV}"
+          docker build -t "${IMAGE_URI}" .
+
+      - name: Push Docker image
+        run: docker push "${IMAGE_URI}"
+
+      - name: Build Cloud Run env file from ${{ env.ENV_FILE }}
+        run: |
+          if [ ! -f "${{ env.ENV_FILE }}" ]; then
+            echo "Missing ${{ env.ENV_FILE }} in backend root."
+            exit 1
+          fi
+
+          echo "Converting ${{ env.ENV_FILE }} to YAML format..."
+          : > env.yaml
+
+          RESERVED_VARS="PORT K_SERVICE K_REVISION K_CONFIGURATION"
+
+          while IFS='=' read -r key value || [ -n "$key" ]; do
+            [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+            key="$(echo "$key" | xargs)"
+            if echo "$RESERVED_VARS" | grep -qw "$key"; then
+              echo "Skipping reserved variable: $key"
+              continue
+            fi
+            value="$(echo "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            value="$(echo "$value" | sed 's/^"//' | sed 's/"$//')"
+            value="$(echo "$value" | sed "s/^'//" | sed "s/'$//")"
+            [[ -z "$value" ]] && continue
+            value="${value//\\/\\\\}"
+            value="${value//\"/\\\"}"
+            printf '%s: "%s"\n' "$key" "$value" >> env.yaml
+          done < "${{ env.ENV_FILE }}"
+
+          grep -Ev '^(NODE_ENV|REDIS_ENABLED):' env.yaml > env.yaml.tmp || true
+          mv env.yaml.tmp env.yaml
+          {
+            echo 'NODE_ENV: "production"'
+            echo 'REDIS_ENABLED: "false"'
+          } >> env.yaml
+
+          for required_key in JWT_SECRET DATABASE_URL; do
+            if ! grep -q "^${required_key}:" env.yaml; then
+              echo "Missing required key in ${{ env.ENV_FILE }}: ${required_key}"
+              exit 1
+            fi
+          done
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "${{ env.SERVICE_NAME }}" \
+            --project "${{ env.PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --platform managed \
+            --image "${IMAGE_URI}" \
+            --allow-unauthenticated \
+            --port=8080 \
+            --env-vars-file env.yaml
+
+      - name: Print service URL
+        run: |
+          URL="$(gcloud run services describe "${{ env.SERVICE_NAME }}" --project "${{ env.PROJECT_ID }}" --region "${{ env.REGION }}" --format='value(status.url)')"
+          echo "Service URL: ${URL}"
