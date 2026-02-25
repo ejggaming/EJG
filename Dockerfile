@@ -47,6 +47,7 @@ COPY prisma/ ./prisma/
 COPY docs/ ./docs/
 COPY scripts/ ./scripts/
 COPY assets/ ./assets/
+COPY views/ ./views/
 COPY index.ts ./
 
 # Generate Prisma client (schema folder includes all .prisma models)
@@ -73,6 +74,7 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/generated ./generated
 COPY --from=builder /app/assets ./assets
+COPY --from=builder /app/views ./views
 COPY --from=builder /app/app ./app
 COPY --from=builder /app/docs ./docs
 
