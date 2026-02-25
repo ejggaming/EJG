@@ -1,6 +1,5 @@
 import { PrismaClient } from "../generated/prisma";
 import { seedTemplates } from "./seeds/templateSeeder";
-import { seedBettingData } from "./seeds/bettingSeeder";
 import { seedAdminUser } from "./seeds/adminSeeder";
 import { seedConfig } from "./seeds/configSeeder";
 import { seedJuetengData } from "./seeds/juetengSeeder";
@@ -19,10 +18,7 @@ async function main() {
 	// 3. Templates (email/SMS)
 	await seedTemplates();
 
-	// 4. Betting data
-	await seedBettingData();
-
-	// 5. Sample draws + territory (dev/testing — configSeeder called internally, idempotent)
+	// 4. Sample draws + territory (dev/testing — configSeeder called internally, idempotent)
 	await seedJuetengData();
 
 	console.log("\n✅ All seeding completed successfully!");

@@ -118,14 +118,15 @@ app.get("/", (req: Request, res: Response) => {
 	});
 });
 
-// Enhanced health check with SLA status
-app.get("/health", (req: Request, res: Response) => {
-	// Import slaMonitor at the top level instead
-	res.status(200).json({
-		status: "healthy",
+// Enhanced health check with DB status
+app.get("/health", async (req: Request, res: Response) => {
+	const { isDbConnected } = await import("./config/database");
+	const status = isDbConnected ? "healthy" : "degraded";
+	res.status(isDbConnected ? 200 : 503).json({
+		status,
 		timestamp: new Date().toISOString(),
 		uptime: process.uptime(),
-		message: "SLA monitoring is active",
+		database: isDbConnected ? "connected" : "disconnected",
 	});
 });
 

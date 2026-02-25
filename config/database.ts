@@ -5,16 +5,21 @@ import { redisClient } from "./redis";
 const prisma = new PrismaClient();
 const logger = getLogger();
 
+export let isDbConnected = false;
+
 export async function connectDb() {
 	try {
 		await prisma.$connect();
+		isDbConnected = true;
 		logger.info("Connected to the database successfully.");
 	} catch (error) {
-		logger.error("Error connecting to the database:", {
+		logger.error("FATAL: Error connecting to the database:", {
 			error,
 			stack: error instanceof Error ? error.stack : undefined,
 		});
-		process.exit(1);
+		// Don't exit — let Cloud Run keep the container alive so the port
+		// stays bound and logs are visible. The /health endpoint will surface
+		// the unhealthy state so the revision can be rolled back cleanly.
 	}
 }
 
