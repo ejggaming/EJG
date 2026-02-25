@@ -85,28 +85,65 @@ jobs:
       - name: Push Docker image
         run: docker push "${IMAGE_URI}"
 
-      - name: Validate Cloud Run runtime secrets
-        env:
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Build Cloud Run env file from .env.develop
         run: |
-          MISSING=0
-          if [ -z "${JWT_SECRET}" ]; then
-            echo "Missing GitHub secret: JWT_SECRET"
-            MISSING=1
-          fi
-          if [ -z "${DATABASE_URL}" ]; then
-            echo "Missing GitHub secret: DATABASE_URL"
-            MISSING=1
-          fi
-          if [ "${MISSING}" -ne 0 ]; then
+          if [ ! -f ".env.develop" ]; then
+            echo "Missing .env.develop in backend root."
             exit 1
           fi
 
+          echo "Converting .env.develop to YAML format..."
+          : > env.yaml
+
+          while IFS= read -r line || [ -n "$line" ]; do
+            # Trim whitespace
+            line="${line#"${line%%[![:space:]]*}"}"
+            line="${line%"${line##*[![:space:]]}"}"
+
+            # Skip blanks/comments/non key-value lines
+            [ -z "$line" ] && continue
+            [[ "$line" == \#* ]] && continue
+            [[ "$line" != *=* ]] && continue
+
+            key="${line%%=*}"
+            value="${line#*=}"
+
+            # Trim key/value
+            key="$(echo "$key" | xargs)"
+            value="$(echo "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
+            # Remove surrounding quotes when present
+            if [[ "$value" =~ ^\".*\"$ ]]; then
+              value="${value:1:${#value}-2}"
+            elif [[ "$value" =~ ^\'.*\'$ ]]; then
+              value="${value:1:${#value}-2}"
+            fi
+
+            # Escape for YAML double-quoted strings
+            value="${value//\\/\\\\}"
+            value="${value//\"/\\\"}"
+
+            printf '%s: "%s"\n' "$key" "$value" >> env.yaml
+          done < .env.develop
+
+          # Cloud Run-required overrides
+          grep -Ev '^(NODE_ENV|PORT|REDIS_ENABLED):' env.yaml > env.yaml.tmp || true
+          mv env.yaml.tmp env.yaml
+          {
+            echo 'NODE_ENV: "production"'
+            echo 'PORT: "8080"'
+            echo 'REDIS_ENABLED: "false"'
+          } >> env.yaml
+
+          # Required startup keys for production runtime
+          for required_key in JWT_SECRET DATABASE_URL; do
+            if ! grep -q "^${required_key}:" env.yaml; then
+              echo "Missing required key in .env.develop: ${required_key}"
+              exit 1
+            fi
+          done
+
       - name: Deploy to Cloud Run
-        env:
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           gcloud run deploy "${{ env.SERVICE_NAME }}" \
             --project "${{ env.PROJECT_ID }}" \
@@ -114,7 +151,7 @@ jobs:
             --platform managed \
             --image "${IMAGE_URI}" \
             --allow-unauthenticated \
-            --update-env-vars "NODE_ENV=production,PORT=8080,JWT_SECRET=${JWT_SECRET},DATABASE_URL=${DATABASE_URL},REDIS_ENABLED=false"
+            --env-vars-file env.yaml
 
       - name: Print service URL
         run: |
