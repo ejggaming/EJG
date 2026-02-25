@@ -94,6 +94,7 @@ const commission = require("./app/commission")(prisma);
 const reports = require("./app/reports")(prisma);
 const auth = require("./app/auth")(prisma);
 const notification = require("./app/notification")(prisma);
+const autobet = require("./app/autoBet")(prisma);
 const docs = require("./app/docs/docs");
 
 // CORS must be registered before security middleware so that rate-limit
@@ -209,6 +210,7 @@ app.use(config.baseApiPath, juetengpayout);
 app.use(config.baseApiPath, commission);
 app.use(config.baseApiPath, reports);
 app.use(config.baseApiPath, notification);
+app.use(config.baseApiPath, autobet);
 app.use(config.baseApiPath, docs(prisma, app));
 
 // Store app instance globally for docs generation after all routes are registered

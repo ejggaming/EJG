@@ -1,0 +1,123 @@
+components:
+  schemas:
+    AutoBetConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          description: MongoDB ObjectId
+          example: "507f1f77bcf86cd799439011"
+        userId:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          description: Owner user ID
+        number1:
+          type: integer
+          minimum: 1
+          maximum: 37
+          description: First number of the bet combination
+          example: 5
+        number2:
+          type: integer
+          minimum: 1
+          maximum: 37
+          description: Second number of the bet combination
+          example: 12
+        combinationKey:
+          type: string
+          description: Canonical "min-max" combination key (e.g. "5-12")
+          example: "5-12"
+        amountPerBet:
+          type: number
+          description: Stake per individual bet in PHP
+          example: 10
+        durationDays:
+          type: integer
+          minimum: 1
+          maximum: 30
+          description: Number of days for this auto bet run
+          example: 7
+        startDate:
+          type: string
+          format: date-time
+          description: Date the auto bet starts
+        endDate:
+          type: string
+          format: date-time
+          description: Date the auto bet ends (startDate + durationDays)
+        status:
+          type: string
+          enum: [ACTIVE, PAUSED, COMPLETED, CANCELLED]
+          description: Current configuration status
+          example: ACTIVE
+        betsPlaced:
+          type: integer
+          description: Number of bets successfully placed so far
+          example: 6
+        totalBets:
+          type: integer
+          description: Total bets to place (durationDays × 3)
+          example: 21
+        totalSpent:
+          type: number
+          description: Total amount spent so far in PHP
+          example: 60
+        estimatedTotal:
+          type: number
+          description: Estimated total cost for all bets (returned on create)
+          example: 210
+        daysAffordable:
+          type: integer
+          description: Days the current balance can sustain (returned on create)
+          example: 5
+        balanceWarning:
+          type: string
+          nullable: true
+          description: Warning message if balance is below estimated total
+        executions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AutoBetExecution'
+          description: Execution history (included in getById and getMyConfigs)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AutoBetExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          description: MongoDB ObjectId
+        autoBetConfigId:
+          type: string
+          description: Parent AutoBetConfig ID
+        drawId:
+          type: string
+          description: Draw that triggered this execution
+        betId:
+          type: string
+          nullable: true
+          description: Created JuetengBet ID (null if failed)
+        transactionId:
+          type: string
+          nullable: true
+          description: Created Transaction ID (null if failed)
+        status:
+          type: string
+          enum: [PLACED, FAILED, SKIPPED]
+          description: Execution result
+          example: PLACED
+        failReason:
+          type: string
+          nullable: true
+          description: Reason for failure (e.g. "Insufficient balance")
+        executedAt:
+          type: string
+          format: date-time
+          description: When this execution was processed

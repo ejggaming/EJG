@@ -46,6 +46,7 @@ model User {
   // Platform relations
   notifications    Notification[]
   otps             OTP[]
+  autoBetConfigs   AutoBetConfig[]
 
   @@map("users")
 }

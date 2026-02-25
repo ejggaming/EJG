@@ -312,6 +312,88 @@ async function settleBetsForDraw(
 	);
 }
 
+/**
+ * Execute all ACTIVE auto bet configs for a draw that just opened.
+ */
+async function executeAutoBetsForDraw(
+	prisma: PrismaClient,
+	io: any,
+	draw: { id: string; drawType: string },
+) {
+	const now = new Date();
+	const configs = await prisma.autoBetConfig.findMany({
+		where: { status: "ACTIVE", startDate: { lte: now }, endDate: { gte: now } },
+	});
+	for (const cfg of configs) {
+		const alreadyPlaced = await prisma.autoBetExecution.findFirst({
+			where: { autoBetConfigId: cfg.id, drawId: draw.id },
+		});
+		if (alreadyPlaced) continue;
+		const wallet = await prisma.wallet.findUnique({ where: { userId: cfg.userId } });
+		if (!wallet || wallet.balance < cfg.amountPerBet) {
+			await prisma.autoBetConfig.update({ where: { id: cfg.id }, data: { status: "PAUSED" } });
+			await prisma.autoBetExecution.create({
+				data: { autoBetConfigId: cfg.id, drawId: draw.id, status: "FAILED", failReason: "Insufficient balance" },
+			});
+			notifyUser(prisma, io, cfg.userId, {
+				type: "SYSTEM",
+				title: "Auto Bet Paused",
+				body: `Your auto bet was paused due to insufficient balance for the ${draw.drawType} draw.`,
+				metadata: { autoBetConfigId: cfg.id },
+			});
+			continue;
+		}
+		try {
+			const newBalance = wallet.balance - cfg.amountPerBet;
+			const reference = `AUTOBET-${draw.id}-${cfg.id}`;
+			const txReference = `BET-${reference}`;
+			const [, bet, tx] = await prisma.$transaction([
+				prisma.wallet.update({ where: { id: wallet.id }, data: { balance: newBalance } }),
+				prisma.juetengBet.create({
+					data: {
+						drawId: draw.id, bettorId: cfg.userId,
+						number1: cfg.number1, number2: cfg.number2,
+						combinationKey: cfg.combinationKey, amount: cfg.amountPerBet,
+						status: "PENDING", reference, placedAt: new Date(),
+					},
+				}),
+				prisma.transaction.create({
+					data: {
+						userId: cfg.userId, walletId: wallet.id, type: "JUETENG_BET",
+						amount: cfg.amountPerBet, balanceBefore: wallet.balance, balanceAfter: newBalance,
+						status: "COMPLETED", reference: txReference,
+						description: `Auto bet on ${draw.drawType} draw — ${cfg.combinationKey}`,
+					},
+				}),
+				prisma.juetengDraw.update({
+					where: { id: draw.id },
+					data: { totalBets: { increment: 1 }, totalStake: { increment: cfg.amountPerBet }, grossProfit: { increment: cfg.amountPerBet } },
+				}),
+			]);
+			await prisma.autoBetExecution.create({
+				data: { autoBetConfigId: cfg.id, drawId: draw.id, betId: bet.id, transactionId: tx.id, status: "PLACED" },
+			});
+			const newBetsPlaced = cfg.betsPlaced + 1;
+			const newStatus = newBetsPlaced >= cfg.totalBets ? "COMPLETED" : "ACTIVE";
+			await prisma.autoBetConfig.update({
+				where: { id: cfg.id },
+				data: { betsPlaced: newBetsPlaced, totalSpent: { increment: cfg.amountPerBet }, status: newStatus },
+			});
+			if (io) io.to(cfg.userId).emit("wallet:updated", { newBalance });
+			notifyUser(prisma, io, cfg.userId, {
+				type: "TRANSACTION", title: "Auto Bet Placed",
+				body: `₱${cfg.amountPerBet} auto bet placed on ${draw.drawType} draw (${cfg.combinationKey}). ${newBetsPlaced}/${cfg.totalBets} bets done.`,
+				metadata: { autoBetConfigId: cfg.id, betId: bet.id },
+			});
+		} catch (err) {
+			await prisma.autoBetExecution.create({
+				data: { autoBetConfigId: cfg.id, drawId: draw.id, status: "FAILED", failReason: String(err) },
+			});
+			juetengDrawLogger.error(`Auto bet error for config ${cfg.id}: ${err}`);
+		}
+	}
+}
+
 export const controller = (prisma: PrismaClient) => {
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
 		let requestData = req.body;
@@ -729,6 +811,10 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			await invalidateCache.byPattern(`cache:juetengDraw:byId:${id}:*`).catch(() => {});
 			await invalidateCache.byPattern("cache:juetengDraw:list:*").catch(() => {});
+			// Fire auto bets for this draw (non-blocking)
+			executeAutoBetsForDraw(prisma, (req as any).io, updated).catch((err: unknown) => {
+				juetengDrawLogger.error(`Auto bet execution failed for draw ${id}: ${err}`);
+			});
 			res.status(200).json(
 				buildSuccessResponse("Draw opened — bets are now accepted.", updated, 200),
 			);

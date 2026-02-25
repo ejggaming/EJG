@@ -1,0 +1,51 @@
+enum AutoBetStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum AutoBetExecutionStatus {
+  PLACED
+  FAILED
+  SKIPPED
+}
+
+model AutoBetConfig {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String        @db.ObjectId
+  user           User          @relation(fields: [userId], references: [id])
+  number1        Int
+  number2        Int
+  combinationKey String
+  amountPerBet   Float
+  durationDays   Int           // user-chosen duration (e.g. 3, 4, 5, 7 days)
+  startDate      DateTime
+  endDate        DateTime      // startDate + durationDays (auto-computed at creation)
+  status         AutoBetStatus @default(ACTIVE)
+  betsPlaced     Int           @default(0)
+  totalBets      Int           // durationDays × 3, set at creation
+  totalSpent     Float         @default(0)
+  executions     AutoBetExecution[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@map("auto_bet_configs")
+}
+
+model AutoBetExecution {
+  id              String                 @id @default(auto()) @map("_id") @db.ObjectId
+  autoBetConfigId String                 @db.ObjectId
+  autoBetConfig   AutoBetConfig          @relation(fields: [autoBetConfigId], references: [id])
+  drawId          String                 @db.ObjectId
+  betId           String?                @db.ObjectId
+  transactionId   String?                @db.ObjectId
+  status          AutoBetExecutionStatus
+  failReason      String?
+  executedAt      DateTime               @default(now())
+
+  @@index([autoBetConfigId])
+  @@index([drawId])
+  @@map("auto_bet_executions")
+}
