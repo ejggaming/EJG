@@ -46,8 +46,8 @@ export const config = {
 		host: process.env.EMAIL_HOST || "smtp.gmail.com",
 		port: parseInt(process.env.EMAIL_PORT || "587"),
 		secure: process.env.EMAIL_SECURE === "true",
-		user: process.env.EMAIL || "",
+		user: process.env.SMTP_USER || process.env.EMAIL || "",
 		appPassword: process.env.APP_PASSWORD || "",
-		from: process.env.EMAIL_FROM || process.env.EMAIL || "noreply@jueteng.ph",
+		from: process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL || "noreply@jueteng.ph",
 	},
 };
