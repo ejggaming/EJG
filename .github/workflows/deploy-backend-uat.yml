@@ -1,17 +1,18 @@
-name: Deploy Backend to GCP Cloud Run
+name: Deploy Backend to GCP Cloud Run (UAT)
 
 on:
   push:
     branches:
-      - develop
+      - uat
   workflow_dispatch:
 
 env:
-  PROJECT_ID: ejg-api-dev
+  PROJECT_ID: ejg-api-dev        # update if UAT has its own GCP project
   REGION: us-central1
-  SERVICE_NAME: ejg-api-backend-dev
+  SERVICE_NAME: ejg-api-backend-uat
   ARTIFACT_REPOSITORY: backend
   IMAGE_NAME: backend-api
+  ENV_FILE: .env.uat
 
 jobs:
   deploy:
@@ -26,10 +27,10 @@ jobs:
       - name: Resolve service account key
         id: sa_key
         env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY_UAT || secrets.GCP_SA_KEY }}
         run: |
           if [ -z "${GCP_SA_KEY}" ]; then
-            echo "Missing GCP_SA_KEY secret."
+            echo "Missing GCP_SA_KEY_UAT (or GCP_SA_KEY) secret."
             exit 1
           fi
 
@@ -85,44 +86,34 @@ jobs:
       - name: Push Docker image
         run: docker push "${IMAGE_URI}"
 
-      - name: Build Cloud Run env file from .env.develop
+      - name: Build Cloud Run env file from ${{ env.ENV_FILE }}
         run: |
-          if [ ! -f ".env.develop" ]; then
-            echo "Missing .env.develop in backend root."
+          if [ ! -f "${{ env.ENV_FILE }}" ]; then
+            echo "Missing ${{ env.ENV_FILE }} in backend root."
             exit 1
           fi
 
-          echo "Converting .env.develop to YAML format..."
+          echo "Converting ${{ env.ENV_FILE }} to YAML format..."
           : > env.yaml
 
-          # Cloud Run reserved environment variables
           RESERVED_VARS="PORT K_SERVICE K_REVISION K_CONFIGURATION"
 
           while IFS='=' read -r key value || [ -n "$key" ]; do
-            # Skip empty lines/comments
             [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-
             key="$(echo "$key" | xargs)"
-
-            # Skip reserved variables managed by Cloud Run
             if echo "$RESERVED_VARS" | grep -qw "$key"; then
               echo "Skipping reserved variable: $key"
               continue
             fi
-
             value="$(echo "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
             value="$(echo "$value" | sed 's/^"//' | sed 's/"$//')"
             value="$(echo "$value" | sed "s/^'//" | sed "s/'$//")"
             [[ -z "$value" ]] && continue
-
-            # Escape for YAML double-quoted strings
             value="${value//\\/\\\\}"
             value="${value//\"/\\\"}"
-
             printf '%s: "%s"\n' "$key" "$value" >> env.yaml
-          done < .env.develop
+          done < "${{ env.ENV_FILE }}"
 
-          # Cloud Run-required overrides
           grep -Ev '^(NODE_ENV|REDIS_ENABLED):' env.yaml > env.yaml.tmp || true
           mv env.yaml.tmp env.yaml
           {
@@ -130,10 +121,9 @@ jobs:
             echo 'REDIS_ENABLED: "false"'
           } >> env.yaml
 
-          # Required startup keys for production runtime
           for required_key in JWT_SECRET DATABASE_URL; do
             if ! grep -q "^${required_key}:" env.yaml; then
-              echo "Missing required key in .env.develop: ${required_key}"
+              echo "Missing required key in ${{ env.ENV_FILE }}: ${required_key}"
               exit 1
             fi
           done
