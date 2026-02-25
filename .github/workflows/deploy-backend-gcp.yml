@@ -18,32 +18,46 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Resolve Workload Identity inputs
-        id: auth_inputs
+      - name: Resolve service account key
+        id: sa_key
         env:
-          GCP_WIF_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
         run: |
-          if [ -z "${GCP_WIF_PROVIDER}" ] || [ -z "${GCP_SERVICE_ACCOUNT}" ]; then
-            echo "Missing Workload Identity secrets."
-            echo "Set both GCP_WORKLOAD_IDENTITY_PROVIDER and GCP_SERVICE_ACCOUNT."
+          if [ -z "${GCP_SA_KEY}" ]; then
+            echo "Missing GCP_SA_KEY secret."
             exit 1
           fi
 
-          echo "workload_identity_provider=${GCP_WIF_PROVIDER}" >> "${GITHUB_OUTPUT}"
-          echo "service_account=${GCP_SERVICE_ACCOUNT}" >> "${GITHUB_OUTPUT}"
+          RAW_KEY="${GCP_SA_KEY}"
+          JSON_KEY=""
 
-      - name: Authenticate to Google Cloud (Workload Identity)
+          if printf '%s' "${RAW_KEY}" | jq -e . >/dev/null 2>&1; then
+            JSON_KEY="${RAW_KEY}"
+          else
+            DECODED_KEY="$(printf '%s' "${RAW_KEY}" | base64 --decode 2>/dev/null || true)"
+            if [ -n "${DECODED_KEY}" ] && printf '%s' "${DECODED_KEY}" | jq -e . >/dev/null 2>&1; then
+              JSON_KEY="${DECODED_KEY}"
+            else
+              echo "GCP_SA_KEY must be raw service-account JSON or base64-encoded JSON."
+              exit 1
+            fi
+          fi
+
+          {
+            echo "credentials_json<<EOF"
+            printf '%s\n' "${JSON_KEY}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ steps.auth_inputs.outputs.workload_identity_provider }}
-          service_account: ${{ steps.auth_inputs.outputs.service_account }}
+          credentials_json: ${{ steps.sa_key.outputs.credentials_json }}
 
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
