@@ -18,6 +18,7 @@ import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/config";
 import { config as constants } from "../../config/constant";
 import { sendOtpEmail, sendWelcomeEmail } from "../../utils/emailService";
+import { notifyUser } from "../../utils/notifyUser";
 
 const logger = getLogger();
 const authLogger = logger.child({ module: "auth" });
@@ -248,6 +249,22 @@ export const controller = (prisma: PrismaClient) => {
 			};
 
 			authLogger.info(`User registered successfully: ${user.email}`);
+
+			// Notify all admins about the new registration
+			const io = (req as any).io;
+			prisma.user.findMany({ where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } }, select: { id: true } })
+				.then((admins) => {
+					for (const admin of admins) {
+						notifyUser(prisma, io, admin.id, {
+							type: "SYSTEM",
+							title: "New User Registered",
+							body: `${firstName} (${email}) just signed up as a new player.`,
+							metadata: { userId: user.id, email, role: user.role },
+						});
+					}
+				})
+				.catch((err) => authLogger.error(`Admin new-user notification failed: ${err}`));
+
 			const successResponse = buildSuccessResponse(
 				constants.SUCCESS.AUTH.REGISTRATION_SUCCESSFUL,
 				responseData,
