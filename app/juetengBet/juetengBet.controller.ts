@@ -122,17 +122,20 @@ export const controller = (prisma: PrismaClient) => {
 			// 5. Auto-generate order-independent combinationKey e.g. "5-12"
 			const combinationKey = buildCombinationKey(number1, number2);
 
-			// 6. Auto-generate unique reference: YYYYMMDD-{MRN|AFT}-{SEQ}
+			// 6. Auto-generate unique reference: YYYYMMDD-{MRN|AFT}-{RANDOM}
+			// Using a random suffix avoids collisions under concurrent bet placement,
+			// which previously caused unique constraint violations on jueteng_bets.reference.
 			const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
 			const typeAbbr = draw.drawType === "MORNING" ? "MRN" : "AFT";
-			const betCount = await prisma.juetengBet.count({ where: { drawId } });
-			const seq = String(betCount + 1).padStart(5, "0");
-			const reference = `${dateStr}-${typeAbbr}-${seq}`;
+			const randomSuffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+			const reference = `${dateStr}-${typeAbbr}-${randomSuffix}`;
 
 			// 7. Check wallet balance and deduct atomically
 			const wallet = await prisma.wallet.findUnique({ where: { userId: bettorId } });
 			if (!wallet) {
-				res.status(404).json(buildErrorResponse("Wallet not found. Please set up your wallet first.", 404));
+				res.status(404).json(
+					buildErrorResponse("Wallet not found. Please set up your wallet first.", 404),
+				);
 				return;
 			}
 			if (wallet.status !== "ACTIVE") {
