@@ -278,6 +278,17 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const whereClause: Prisma.JuetengBetWhereInput = {};
 
+			// Non-admins can only see their own bets
+			const role = (req as any).role as string | undefined;
+			const userId = (req as any).userId as string | undefined;
+			if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
+				if (!userId) {
+					res.status(401).json(buildErrorResponse("Unauthorized", 401));
+					return;
+				}
+				whereClause.bettorId = userId;
+			}
+
 			const searchFields = ["status", "combinationKey", "reference"];
 			if (query) {
 				const searchConditions = buildSearchConditions("JuetengBet", query, searchFields);
