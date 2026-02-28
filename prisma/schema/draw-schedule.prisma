@@ -4,12 +4,14 @@ enum DrawType {
   EVENING   // ~9:00 PM Asia/Manila
 }
 
-// Defines the recurring daily draw schedule (morning + afternoon)
+// Defines the recurring daily draw schedule (morning, afternoon, evening).
+// cutoffMinutes is configured here (per draw type) and controls how many minutes
+// before the scheduled draw time betting is automatically closed (e.g. 5 = bets close 5 min before draw).
 model DrawSchedule {
   id            String   @id @default(auto()) @map("_id") @db.ObjectId
   drawType      DrawType @unique
-  scheduledTime String   // "11:00" or "16:00" (24h format)
-  cutoffMinutes Int      @default(5) // minutes before draw when bets close
+  scheduledTime String   // "11:00", "16:00", or "21:00" (24h Asia/Manila)
+  cutoffMinutes Int      @default(5) // admin-configurable: betting closes N minutes before the draw
   timeZone      String   @default("Asia/Manila")
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())

@@ -10,6 +10,7 @@ import { config } from "./config/config";
 import openApiSpecs from "./docs/openApiSpecs";
 import verifyToken from "./middleware/verifyToken";
 import { connectAllDatabases, disconnectAllDatabases } from "./config/database";
+import { startDrawScheduler } from "./utils/drawScheduler";
 import { securityMiddleware, devSecurityMiddleware } from "./middleware/security";
 import { authSecurityMiddleware } from "./middleware/security";
 
@@ -218,6 +219,7 @@ app.use(config.baseApiPath, docs(prisma, app));
 
 server.listen(config.port, async () => {
 	await connectAllDatabases();
+	startDrawScheduler(prisma, io);
 	console.log(`Server is running on port ${config.port}`);
 });
 

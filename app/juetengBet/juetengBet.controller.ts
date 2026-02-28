@@ -126,8 +126,10 @@ export const controller = (prisma: PrismaClient) => {
 			// Using a random suffix avoids collisions under concurrent bet placement,
 			// which previously caused unique constraint violations on jueteng_bets.reference.
 			const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-			const typeAbbr = draw.drawType === "MORNING" ? "MRN" : "AFT";
-			const randomSuffix = Math.random().toString(36).slice(2, 8).toUpperCase();
+			const typeAbbr =
+				draw.drawType === "MORNING" ? "MRN" : draw.drawType === "EVENING" ? "EVN" : "AFT";
+			// Always produce exactly 8 chars: pad short base-36 strings to prevent collisions
+			const randomSuffix = Math.random().toString(36).slice(2).padEnd(8, "0").slice(0, 8).toUpperCase();
 			const reference = `${dateStr}-${typeAbbr}-${randomSuffix}`;
 
 			// 7. Check wallet balance and deduct atomically
@@ -188,7 +190,7 @@ export const controller = (prisma: PrismaClient) => {
 						currency: wallet.currency,
 						status: "COMPLETED",
 						reference: txReference,
-						description: `Bet placed on ${typeAbbr === "MRN" ? "Morning" : "Afternoon"} draw — ${combinationKey}`,
+						description: `Bet placed on ${typeAbbr === "MRN" ? "Morning" : typeAbbr === "EVN" ? "Evening" : "Afternoon"} draw — ${combinationKey}`,
 					},
 				}),
 				prisma.juetengDraw.update({
