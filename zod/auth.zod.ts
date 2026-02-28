@@ -37,7 +37,7 @@ export const RegisterSchema = z.object({
 
 // ── Login ──
 export const LoginSchema = z.object({
-	email: z.string().email("Invalid email address"),
+	phoneNumber: z.string().regex(/^09\d{9}$/, "Enter a valid Philippine mobile number (09xxxxxxxxx)"),
 	password: z.string().min(1, "Password is required"),
 });
 

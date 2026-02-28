@@ -523,6 +523,10 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 			const findManyQuery = buildFindManyQuery(whereClause, skip, limit, order, sort, fields);
+			// Include winner count (payouts relation) when no field filter is applied
+			if (!findManyQuery.select) {
+				findManyQuery.include = { _count: { select: { payouts: true } } };
+			}
 
 			const [juetengDraws, total] = await Promise.all([
 				document ? prisma.juetengDraw.findMany(findManyQuery) : [],

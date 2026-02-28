@@ -222,7 +222,7 @@ export const controller = (prisma: PrismaClient) => {
 			await prisma.oTP.create({
 				data: {
 					userId: user.id,
-					email,
+					email: user.email,
 					code: otpCode,
 					type: "EMAIL_VERIFICATION" as any,
 					channel: "EMAIL",
@@ -252,7 +252,11 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Notify all admins about the new registration
 			const io = (req as any).io;
-			prisma.user.findMany({ where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } }, select: { id: true } })
+			prisma.user
+				.findMany({
+					where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
+					select: { id: true },
+				})
 				.then((admins) => {
 					for (const admin of admins) {
 						notifyUser(prisma, io, admin.id, {
@@ -296,16 +300,16 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		const { email, password } = validation.data;
+		const { phoneNumber, password } = validation.data;
 
 		try {
-			const user = await prisma.user.findUnique({
-				where: { email },
+			const user = await prisma.user.findFirst({
+				where: { phoneNumber },
 				include: { person: true },
 			});
 
 			if (!user || !user.password) {
-				authLogger.warn(`Login attempt with invalid credentials: ${email}`);
+				authLogger.warn(`Login attempt with invalid credentials: ${phoneNumber}`);
 				const errorResponse = buildErrorResponse(
 					constants.ERROR.AUTH.INVALID_CREDENTIALS,
 					401,
@@ -316,7 +320,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Check if account is suspended or archived
 			if (user.status === "suspended" || user.status === "archived") {
-				authLogger.warn(`Login attempt on ${user.status} account: ${email}`);
+				authLogger.warn(`Login attempt on ${user.status} account: ${phoneNumber}`);
 				const errorResponse = buildErrorResponse(
 					`Account is ${user.status}. Please contact support.`,
 					403,
@@ -333,7 +337,7 @@ export const controller = (prisma: PrismaClient) => {
 				const m = t.getMonth() - dob.getMonth();
 				const age = m < 0 || (m === 0 && t.getDate() < dob.getDate()) ? a - 1 : a;
 				if (age < 18) {
-					authLogger.warn(`Login blocked for underage account: ${email}`);
+					authLogger.warn(`Login blocked for underage account: ${phoneNumber}`);
 					res.status(403).json(
 						buildErrorResponse(
 							"Access denied. You must be at least 18 years old.",
@@ -346,7 +350,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Block login if email is not verified
 			if (!user.isEmailVerified) {
-				authLogger.warn(`Login attempt with unverified email: ${email}`);
+				authLogger.warn(`Login attempt with unverified email: ${phoneNumber}`);
 
 				// Auto-send new OTP for verification
 				const otpCode = generateOtpCode(config.otp.length);
@@ -355,7 +359,7 @@ export const controller = (prisma: PrismaClient) => {
 				await prisma.oTP.create({
 					data: {
 						userId: user.id,
-						email,
+						email: user.email,
 						code: otpCode,
 						type: "EMAIL_VERIFICATION" as any,
 						channel: "EMAIL",
@@ -363,9 +367,12 @@ export const controller = (prisma: PrismaClient) => {
 					},
 				});
 
-				sendOtpEmail(email, otpCode, "EMAIL_VERIFICATION", config.otp.expiryMinutes).catch(
-					(err) => authLogger.error(`OTP email failed during login: ${err}`),
-				);
+				sendOtpEmail(
+					user.email,
+					otpCode,
+					"EMAIL_VERIFICATION",
+					config.otp.expiryMinutes,
+				).catch((err) => authLogger.error(`OTP email failed during login: ${err}`));
 
 				const errorResponse = buildErrorResponse(
 					"Email not verified. A new OTP verification code has been sent to your inbox.",
@@ -378,7 +385,7 @@ export const controller = (prisma: PrismaClient) => {
 			// Verify password
 			const isPasswordValid = await argon2.verify(user.password, password);
 			if (!isPasswordValid) {
-				authLogger.warn(`Invalid password for: ${email}`);
+				authLogger.warn(`Invalid password for: ${phoneNumber}`);
 				const errorResponse = buildErrorResponse(
 					constants.ERROR.AUTH.INVALID_CREDENTIALS,
 					401,
@@ -481,7 +488,7 @@ export const controller = (prisma: PrismaClient) => {
 				accessToken,
 			};
 
-			authLogger.info(`User logged in successfully: ${user.email}`);
+			authLogger.info(`User logged in successfully: ${phoneNumber}`);
 			const successResponse = buildSuccessResponse(
 				constants.SUCCESS.AUTH.LOGGED_IN_SUCCESSFULLY,
 				responseData,
