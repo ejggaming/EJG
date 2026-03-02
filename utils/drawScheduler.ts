@@ -12,19 +12,20 @@ const logger = getLogger().child({ module: "drawScheduler" });
  * takes effect on the next cron tick without a server restart.
  */
 export function startDrawScheduler(prisma: PrismaClient, io: Server): void {
-	cron.schedule(
-		"* * * * *",
-		async () => {
-			try {
-				await closeDrawsAtCutoff(prisma, io);
-			} catch (error) {
-				logger.error("[drawScheduler] Unhandled error in cron tick:", error);
-			}
-		},
-		{ timezone: "Asia/Manila" },
-	);
+	// Auto-close temporarily disabled — uncomment to re-enable
+	// cron.schedule(
+	// 	"* * * * *",
+	// 	async () => {
+	// 		try {
+	// 			await closeDrawsAtCutoff(prisma, io);
+	// 		} catch (error) {
+	// 			logger.error("[drawScheduler] Unhandled error in cron tick:", error);
+	// 		}
+	// 	},
+	// 	{ timezone: "Asia/Manila" },
+	// );
 
-	logger.info("[drawScheduler] Started — checks every minute for cutoff closures");
+	logger.info("[drawScheduler] Started — auto-close is currently disabled");
 }
 
 async function closeDrawsAtCutoff(prisma: PrismaClient, io: Server): Promise<void> {
