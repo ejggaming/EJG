@@ -25,7 +25,7 @@ describe("Auth Controller", () => {
 		},
 		contactInfo: {
 			email: "juan@example.com",
-			phones: [{ type: "mobile", number: "+639171234567", isPrimary: true }],
+			phones: [{ type: "mobile", number: "09171234567", isPrimary: true }],
 			address: [],
 		},
 		createdAt: new Date(),
@@ -37,7 +37,7 @@ describe("Auth Controller", () => {
 		personId: mockPerson.id,
 		email: "juan@example.com",
 		userName: "juandc",
-		phoneNumber: "+639171234567",
+		phoneNumber: "09171234567",
 		// Simulated argon2-hashed password for "Password123!"
 		password: "$argon2id$v=19$m=65536,t=3,p=4$hash$hash",
 		role: "PLAYER",
@@ -203,6 +203,7 @@ describe("Auth Controller", () => {
 				password: "StrongPass123!",
 				firstName: "Maria",
 				lastName: "Santos",
+				phoneNumber: "09171234567",
 				role: "PLAYER",
 			};
 			await authController.register(req as Request, res, next);
@@ -220,6 +221,7 @@ describe("Auth Controller", () => {
 				password: "StrongPass123!",
 				firstName: "Maria",
 				lastName: "Santos",
+				phoneNumber: "09171234567",
 				role: "PLAYER",
 			};
 			await authController.register(req as Request, res, next);
@@ -232,7 +234,7 @@ describe("Auth Controller", () => {
 
 		it("should reject registration with missing required fields", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.body = { email: "test@example.com" }; // missing password, firstName, lastName, role
+			req.body = { email: "test@example.com" }; // missing password, firstName, lastName, phoneNumber, role
 			await authController.register(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -245,6 +247,7 @@ describe("Auth Controller", () => {
 				password: "StrongPass123!",
 				firstName: "Test",
 				lastName: "User",
+				phoneNumber: "09171234567",
 				role: "PLAYER",
 			};
 			await authController.register(req as Request, res, next);
@@ -263,6 +266,7 @@ describe("Auth Controller", () => {
 				password: "StrongPass123!",
 				firstName: "Juan",
 				lastName: "Dela Cruz",
+				phoneNumber: "09171234567",
 				role: "PLAYER",
 			};
 			await authController.register(req as Request, res, next);
@@ -270,14 +274,14 @@ describe("Auth Controller", () => {
 			expect(sentData).to.have.property("status", "error");
 		});
 
-		it("should accept registration with optional phone number", async function () {
+		it("should accept registration with required phone number", async function () {
 			this.timeout(TEST_TIMEOUT);
 			req.body = {
 				email: "withphone@example.com",
 				password: "StrongPass123!",
 				firstName: "Maria",
 				lastName: "Santos",
-				phoneNumber: "+639171234567",
+				phoneNumber: "09171234567",
 				role: "PLAYER",
 			};
 			await authController.register(req as Request, res, next);
@@ -626,6 +630,7 @@ describe("Auth Controller", () => {
 				password: "StrongPass123!",
 				firstName: "Error",
 				lastName: "User",
+				phoneNumber: "09171234567",
 				role: "PLAYER",
 			};
 			await authController.register(req as Request, res, next);

@@ -16,8 +16,8 @@ export const RegisterSchema = z.object({
 	middleName: z.string().optional(),
 	phoneNumber: z
 		.string()
-		.regex(/^\+?[1-9]\d{7,14}$/, "Invalid phone number format (E.164)")
-		.optional(),
+		.min(1, "Phone number is required")
+		.regex(/^09\d{9}$/, "Enter a valid Philippine mobile number (09xxxxxxxxx)"),
 	userName: z.string().min(3, "Username must be at least 3 characters").optional(),
 	role: z.enum(["PLAYER", "AGENT"]).default("PLAYER"),
 	dateOfBirth: z.coerce
