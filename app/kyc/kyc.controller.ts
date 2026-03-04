@@ -219,7 +219,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			const searchFields = ["status", "documentType"];
 			if (query) {
-				const searchConditions = buildSearchConditions("Kyc", query, searchFields);
+				const searchConditions = buildSearchConditions("KYC", query, searchFields);
 				if (searchConditions.length > 0) {
 					whereClause.OR = searchConditions;
 				}

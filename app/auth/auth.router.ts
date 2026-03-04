@@ -5,7 +5,8 @@ import verifyToken from "../../middleware/verifyToken";
 // Strict rate limiter for auth endpoints (prevents brute-force / credential stuffing)
 const authRateLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000, // 15 minutes
-	max: 10, // 10 attempts per window
+	// Keep production strict, but avoid false failures in automated QA/E2E suites.
+	max: process.env.NODE_ENV === "test" ? 1000 : 10,
 	message: {
 		status: "error",
 		message: "Too many authentication attempts. Please try again later.",

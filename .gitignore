@@ -73,11 +73,9 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variable files
-.env
 .env.development.local
 .env.test.local
 .env.production.local
-.env.local
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -137,3 +135,15 @@ dist
 
 # Prisma
 generated/prisma/
+
+# QA / E2E artifacts
+playwright-report/
+test-results/
+qa-backend-unit-report.json
+qa-backend-unit.log
+qa-client-unit.log
+
+# One-off fix/temp scripts
+fix_*.js
+temp_*.js
+config.bat

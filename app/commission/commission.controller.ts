@@ -145,7 +145,11 @@ export const controller = (prisma: PrismaClient) => {
 
 			const searchFields = ["type", "status"];
 			if (query) {
-				const searchConditions = buildSearchConditions("Commission", query, searchFields);
+				const searchConditions = buildSearchConditions(
+					"DrawCommission",
+					query,
+					searchFields,
+				);
 				if (searchConditions.length > 0) {
 					whereClause.OR = searchConditions;
 				}
@@ -409,7 +413,9 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const agent = await prisma.agent.findFirst({ where: { userId } });
 			if (!agent) {
-				res.status(200).json(buildSuccessResponse("Commissions retrieved", { commissions: [] }, 200));
+				res.status(200).json(
+					buildSuccessResponse("Commissions retrieved", { commissions: [] }, 200),
+				);
 				return;
 			}
 			const commissions = await prisma.drawCommission.findMany({
@@ -419,18 +425,26 @@ export const controller = (prisma: PrismaClient) => {
 			});
 			// Manually fetch draw info for each commission
 			const drawIds = [...new Set(commissions.map((c) => c.drawId).filter(Boolean))];
-			const draws = drawIds.length > 0
-				? await prisma.juetengDraw.findMany({
-					where: { id: { in: drawIds as string[] } },
-					select: { id: true, drawType: true, drawDate: true, scheduledAt: true },
-				})
-				: [];
+			const draws =
+				drawIds.length > 0
+					? await prisma.juetengDraw.findMany({
+							where: { id: { in: drawIds as string[] } },
+							select: { id: true, drawType: true, drawDate: true, scheduledAt: true },
+						})
+					: [];
 			const drawMap = Object.fromEntries(draws.map((d) => [d.id, d]));
-			const enriched = commissions.map((c) => ({ ...c, draw: c.drawId ? drawMap[c.drawId] : null }));
-			res.status(200).json(buildSuccessResponse("Commissions retrieved", { commissions: enriched }, 200));
+			const enriched = commissions.map((c) => ({
+				...c,
+				draw: c.drawId ? drawMap[c.drawId] : null,
+			}));
+			res.status(200).json(
+				buildSuccessResponse("Commissions retrieved", { commissions: enriched }, 200),
+			);
 		} catch (error) {
 			commissionLogger.error(`getMyCommissions error: ${error}`);
-			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
 		}
 	};
 
@@ -443,21 +457,39 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const agent = await prisma.agent.findFirst({ where: { userId } });
 			if (!agent) {
-				res.status(200).json(buildSuccessResponse("Summary retrieved", { totalEarned: 0, pending: 0, paid: 0, thisMonth: 0, count: 0 }, 200));
+				res.status(200).json(
+					buildSuccessResponse(
+						"Summary retrieved",
+						{ totalEarned: 0, pending: 0, paid: 0, thisMonth: 0, count: 0 },
+						200,
+					),
+				);
 				return;
 			}
 			const all = await prisma.drawCommission.findMany({ where: { agentId: agent.id } });
 			const totalEarned = all.reduce((s, c) => s + c.amount, 0);
-			const pending = all.filter((c) => c.status === "PENDING").reduce((s, c) => s + c.amount, 0);
+			const pending = all
+				.filter((c) => c.status === "PENDING")
+				.reduce((s, c) => s + c.amount, 0);
 			const paid = all.filter((c) => c.status === "PAID").reduce((s, c) => s + c.amount, 0);
 			const startOfMonth = new Date();
 			startOfMonth.setDate(1);
 			startOfMonth.setHours(0, 0, 0, 0);
-			const thisMonth = all.filter((c) => new Date(c.createdAt) >= startOfMonth).reduce((s, c) => s + c.amount, 0);
-			res.status(200).json(buildSuccessResponse("Summary retrieved", { totalEarned, pending, paid, thisMonth, count: all.length }, 200));
+			const thisMonth = all
+				.filter((c) => new Date(c.createdAt) >= startOfMonth)
+				.reduce((s, c) => s + c.amount, 0);
+			res.status(200).json(
+				buildSuccessResponse(
+					"Summary retrieved",
+					{ totalEarned, pending, paid, thisMonth, count: all.length },
+					200,
+				),
+			);
 		} catch (error) {
 			commissionLogger.error(`getSummary error: ${error}`);
-			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
 		}
 	};
 

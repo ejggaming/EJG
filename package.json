@@ -5,9 +5,19 @@
   "scripts": {
     "dev": "dotenv -e .env.develop nodemon index.ts",
     "start": "dotenv -e .env.develop nodemon index.ts",
+    "start:test:e2e": "dotenv -e .env.test -- ts-node index.ts",
     "lint": "eslint app/**/*.ts index.ts lib-entry.ts",
     "format": "eslint app/**/*.ts index.ts lib-entry.ts --fix",
     "test": "mocha --require ts-node/register tests/**/*.spec.ts",
+    "test:qa:unit": "mocha --no-config --require ts-node/register/transpile-only \"tests/qa/unit/**/*.spec.ts\"",
+    "qa:seed:flow": "dotenv -e .env.test -- ts-node prisma/seeds/qaFlowSeeder.ts",
+    "test:qa:integration": "npm run qa:seed:flow && dotenv -e .env.test -v QA_KEEP_DATA=true -- mocha --no-config --require ts-node/register/transpile-only \"tests/qa/integration/**/*.spec.ts\"",
+    "test:qa:e2e": "npm run qa:seed:flow && dotenv -e .env.test -v QA_KEEP_DATA=true -- npm --prefix ../e2e-tests run test",
+    "test:qa:e2e:headed": "npm run qa:seed:flow && dotenv -e .env.test -v QA_KEEP_DATA=true -- npm --prefix ../e2e-tests run test:headed",
+    "test:qa:e2e:chrome": "npm run qa:seed:flow && dotenv -e .env.test -v QA_KEEP_DATA=true -- npm --prefix ../e2e-tests run test:chrome",
+    "test:qa:e2e:ui": "npm run qa:seed:flow && dotenv -e .env.test -v QA_KEEP_DATA=true -- npm --prefix ../e2e-tests run test:ui",
+    "test:qa:e2e:install": "npm --prefix ../e2e-tests run test:install",
+    "test:qa:all": "npm run test:qa:unit && npm run test:qa:integration && npm --prefix ../client run test:qa:unit && npm run test:qa:e2e",
     "build": "webpack --config webpack.config.js",
     "prod": "node ./dist/server.ts",
     "export-docs": "ts-node scripts/generate-openapi.ts && ts-node scripts/export-openapi.ts && npx openapi-to-postmanv2 -s docs/generated/swagger.json -o docs/generated/postman.collection.json -p",
@@ -120,6 +130,7 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3",
-    "yaml": "^2.8.0"
+    "yaml": "^2.8.0",
+    "@playwright/test": "^1.54.2"
   }
 }
